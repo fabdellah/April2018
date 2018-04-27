@@ -24,6 +24,8 @@ from time import time
 import math
 from sklearn import datasets, linear_model
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn import preprocessing
 
 # Import data
 file = 'External_Data.xls'
@@ -37,19 +39,58 @@ russia_Index = df_subset[['Data Type','USD.20']].reset_index()[2:df_subset.shape
 russia_Index.drop('index', axis=1, inplace=True)
 russia_Index = russia_Index.reset_index()
 
+
+start_date_str = '2015-12-31 00:00:00'
+end_date_str = '2016-12-31 00:00:00'
+start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
+end_date = datetime.strptime(end_date_str,"%Y-%m-%d %H:%M:%S") 
+
 df = pd.read_excel('spot_prices.xls')
+
+
 df_oil = df[['date_oil', 'oil']]
 df_oil.columns = ['date', 'oil']
+df_oil['date'] = pd.to_datetime(df_oil['date'])  
+mask = (df_oil['date'] >= start_date) & (df_oil['date'] <= end_date)
+df_oil_x = df_oil.loc[mask].reset_index()  
+df_oil_x.drop('index', axis=1, inplace=True) 
+df_oil_x = df_oil_x.set_index('date')
+df_oil_monthly = df_oil_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
+
 
 df_power = df[['date_power', 'power']]
 df_power.columns = ['date', 'power']
+df_power['date'] = pd.to_datetime(df_power['date'])  
+mask = (df_power['date'] >= start_date) & (df_power['date'] <= end_date)
+df_power_x = df_power.loc[mask].reset_index()  
+df_power_x.drop('index', axis=1, inplace=True) 
+df_power_x = df_power_x.set_index('date')
+df_power_monthly = df_power_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
+
+
 
 df_coal = df[['date_coal', 'coal']]
 df_coal.columns = ['date', 'coal']
+df_coal['date'] = pd.to_datetime(df_coal['date'])  
+mask = (df_coal['date'] >= start_date) & (df_coal['date'] <= end_date)
+df_coal_x = df_coal.loc[mask].reset_index()  
+df_coal_x.drop('index', axis=1, inplace=True) 
+df_coal_x = df_coal_x.set_index('date')
+df_coal_monthly = df_coal_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
+
+
 
 df_gas = df[['date_gas', 'gas']]
 df_gas.columns = ['date', 'gas']
+df_gas['date'] = pd.to_datetime(df_gas['date'])  
+mask = (df_gas['date'] >= start_date) & (df_gas['date'] <= end_date)
+df_gas_x = df_gas.loc[mask].reset_index()  
+df_gas_x.drop('index', axis=1, inplace=True) 
+df_gas_x = df_gas_x.set_index('date')
+df_gas_monthly = df_gas_x.resample("M", how='mean').reset_index().iloc[1:13,:]   
 
+
+df_monthly = np.c_[df_oil_monthly['oil'] , df_power_monthly['power'] , df_coal_monthly['coal'] , df_gas_monthly['gas'] ]
 
 yy = russia_Index[225:237]           #monthly from 2016 to 2017
 yy = yy.reset_index()  
@@ -62,11 +103,7 @@ y = yy['USD.20']
 
 def standardize(x):
     """Standardize the original data set."""
-    mean_x = np.mean(x)
-    x = x - mean_x
-    std_x = np.std(x)
-    x = x / std_x
-    return x
+    return (x - np.mean(x, axis=0)) / np.std(x, axis=0)
 
 
 def calculate_mse(e):
@@ -123,8 +160,7 @@ def gradient_descent(y, tx, initial_w, max_iters, gamma):
 
 def score(X_train,y_train, X_test, y_test,coef):
     y_pred_train = np.dot(X_train,coef)     
-    y_pred = np.dot(X_test,coef)
-    r2 = r2_score(y_test, y_pred)  
+    r2 = r2_score(y_test, np.dot(X_test,coef))  
     r2_train = r2_score(y_train, y_pred_train)
     return r2,r2_train
 
@@ -144,7 +180,8 @@ def ridge_regression(X_train,y_train, X_test, y_test):
     err = metrics.mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)  
     r2_train = r2_score(y_train, ridgeregcv.predict(X_train))
-    return ridgeregcv.coef_ , err, r2, r2_train
+    score = ridgeregcv.score
+    return ridgeregcv.coef_ , err, r2, r2_train, score
  
 
 def linear_regression(X_train,y_train, X_test, y_test):
@@ -194,7 +231,11 @@ def MA_plot(df1, start_date_str,end_date_str, lag, ma_period,reset_period):
     plt.ylabel('Average level')
     plt.show()
  
- 
+    
+def polynomial(X):    
+    poly = PolynomialFeatures(degree=2, interaction_only=True)
+    return poly.fit_transform(X)              
+
 
 class class_alternate(object):
     
@@ -241,14 +282,14 @@ class class_alternate(object):
         start_date_coal = self.start_date - relativedelta(months=int(round(lag_coal))) - relativedelta(months=int(round(ma_period_coal) ))            
         end_date =   self.end_date + relativedelta(months=int(round(lag_coal))) + relativedelta(months=int(round(ma_period_coal) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
         self.df_coal['date'] = pd.to_datetime(self.df_coal['date'])  
-        mask = (self.df_coal['date'] >= start_date_coal) & (self.df_oil['date'] <= end_date)
+        mask = (self.df_coal['date'] >= start_date_coal) & (self.df_coal['date'] <= end_date)
         df_xcoal = self.df_coal.loc[mask].reset_index()  
         df_xcoal.drop('index', axis=1, inplace=True)    
         df_xcoal.iloc[:, [1]] = df_xcoal.iloc[:, [1]].astype(float)          
       
         start_date_gas = self.start_date - relativedelta(months=int(round(lag_gas))) - relativedelta(months=int(round(ma_period_gas) ))            
         end_date =   self.end_date + relativedelta(months=int(round(lag_gas))) + relativedelta(months=int(round(ma_period_gas) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
-        self.df_gas['date'] = pd.to_datetime(self.df_oil['date'])  
+        self.df_gas['date'] = pd.to_datetime(self.df_gas['date'])  
         mask = (self.df_gas['date'] >= start_date_gas) & (self.df_gas['date'] <= end_date)
         df_xgas = self.df_gas.loc[mask].reset_index()  
         df_xgas.drop('index', axis=1, inplace=True)    
@@ -319,9 +360,9 @@ class class_alternate(object):
     
     def alternate(self):
         max_iters = 100
-        gamma = 0.7
+        gamma = 0.1
         coef =  self.init_coef
-        #gradient_w = self.init_coef
+        gradient_w = self.init_coef
         
         for itera in range(self.nbr_iterations):
             
@@ -344,19 +385,18 @@ class class_alternate(object):
             X_df = self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0))     
             #XX = np.c_[np.ones(X_df.shape[0]),X_df]  
             print('shape X_df', X_df.shape)
-            print('shape stand X_df', preprocessing.scale(X_df.shape))
-            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,4)] #.reshape(self.nbr_months_per_year,5)) ] 
+            print('shape stand X_df', preprocessing.scale(X_df).shape)
+            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,4)] 
             w_initial = gradient_w
-            gradient_loss, gradient_w = gradient_descent(standardize(y), XX_stand, w_initial, max_iters, gamma)            
-            X_train, X_test, y_train, y_test = train_test_split(XX_stand, standardize(y), random_state=1)
+            gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_stand, w_initial, max_iters, gamma)            
+            X_train, X_test, y_train, y_test = train_test_split(XX_stand, preprocessing.scale(y), random_state=1)
             
             res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
-            y_pred_GD = np.dot(X_test,gradient_w)
              
             # update coef
             coef = res_ridge[0]
-            
-            print('Coef GD:', gradient_w ,'Error GD:', metrics.mean_squared_error(y_test, y_pred_GD), 'R2 GD', )
+            y_pred_GD = np.dot(X_test,gradient_w)
+            print('Coef GD:', gradient_w ,'Error GD:', metrics.mean_squared_error(y_test, y_pred_GD), 'R2 GD', r2_score(y_test, y_pred_GD)  )
             print('Coef RR:', res_ridge[0] )
             print('Error RR: ', res_ridge[1])
             print('R2 RR: ', res_ridge[2])
@@ -383,33 +423,37 @@ if __name__ == '__main__':
     print('final coef: ', coef)
     
    
-    r2_train = r2_score(y_train, np.dot(X_train,coef))
-    res_ridge = ridge_regression(X_train,y_train, X_test, y_test)
-    print('Coef RR:', res_ridge[0] )
-    print('Error RR: ', res_ridge[1])
-    print('R2 RR: ', res_ridge[2])
-    print('R2_train RR: ', res_ridge[3])
     
     
     
-    
-def ridge_regression(y, tx, lambda_):
-    """implement ridge regression."""
-    aI = 2 * tx.shape[0] * lambda_ * np.identity(tx.shape[1])
-    a = tx.T.dot(tx) + aI
-    b = tx.T.dot(y)
-    return np.linalg.solve(a, b)
+ 
 
-coefcoef=ridge_regression(y_train, X_train, 0.001)    
-    
-    
-    MA_plot(df_oil, '2016-01-31 00:00:00','2017-01-31 00:00:00', lag , ma_period, reset_period)
-    
-    lag=1
-    ma_period = 2
-    reset_period = 2
-    
-    v = optimization.MA_func_vect(lag, ma_period,reset_period, np.empty(0))
-    
-    
-    
+#XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(df_monthly).reshape(12,4)] 
+XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(X_df).reshape(12,4)] 
+
+
+ 
+X_train, X_test, y_train, y_test = train_test_split(XX_stand, y, random_state=1)    
+
+
+max_iters = 1000
+gamma = 0.1  
+gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_stand, np.array([0,0,0,0,0]), max_iters, gamma)   
+r2_score(preprocessing.scale(y), np.dot(XX_stand,gradient_w))
+
+
+gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y_train), X_train, np.array([0,0,0,0,0]), max_iters, gamma)             
+r2_score(preprocessing.scale(y_train), np.dot(X_train,gradient_w))
+ 
+ 
+res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
+r2_score(preprocessing.scale(y_train), np.dot(X_train,res_ridge[0]))
+
+
+print('Coef RR:', res_ridge[0] )
+print('Error RR: ', res_ridge[1])
+print('R2 RR: ', res_ridge[2])
+print('R2_train RR: ', res_ridge[3])
+print('score: ', res_ridge[4]) 
+
+
