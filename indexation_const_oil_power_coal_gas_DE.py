@@ -384,8 +384,6 @@ class class_alternate(object):
             t02 = time()
             X_df = self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0))     
             #XX = np.c_[np.ones(X_df.shape[0]),X_df]  
-            print('shape X_df', X_df.shape)
-            print('shape stand X_df', preprocessing.scale(X_df).shape)
             XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,4)] 
             w_initial = gradient_w
             gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_stand, w_initial, max_iters, gamma)            
@@ -396,7 +394,15 @@ class class_alternate(object):
             # update coef
             coef = res_ridge[0]
             y_pred_GD = np.dot(X_test,gradient_w)
-            print('Coef GD:', gradient_w ,'Error GD:', metrics.mean_squared_error(y_test, y_pred_GD), 'R2 GD', r2_score(y_test, y_pred_GD)  )
+            print('Coef GD:', gradient_w )
+            print('Error GD:', metrics.mean_squared_error(y_test, y_pred_GD))
+            print('R2_test GD', r2_score(y_test, y_pred_GD)  )
+            print('R2_all_matrix GD', r2_score(preprocessing.scale(y), np.dot(XX_stand,gradient_w))  )
+            
+            
+            print('---------')
+            
+            
             print('Coef RR:', res_ridge[0] )
             print('Error RR: ', res_ridge[1])
             print('R2 RR: ', res_ridge[2])
@@ -426,29 +432,54 @@ if __name__ == '__main__':
     
     
     
+#test monthly
+
+max_iters = 1000
+gamma = 0.1 
+
+
+print('******** TEST MONTHLY ********')
+XX_monthly = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(df_monthly).reshape(12,4)] 
+X_train, X_test, y_train, y_test = train_test_split(XX_monthly, y, random_state=1)     
+gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_monthly, np.array([0,0,0,0,0]), max_iters, gamma)   
+r2all = r2_score(preprocessing.scale(y), np.dot(XX_monthly,gradient_w))
+print('GD R2 ALL: ', r2all)
+gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y_train), X_train, np.array([0,0,0,0,0]), max_iters, gamma)            
+r2train = r2_score(preprocessing.scale(y_train), np.dot(X_train,gradient_w))
+print('GD R2 train: ', r2train ) 
  
+res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
+r2RRtrain = r2_score(preprocessing.scale(y_train), np.dot(X_train,res_ridge[0]))
+print('R2 RR train: ', r2RRtrain)
 
-#XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(df_monthly).reshape(12,4)] 
-XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(X_df).reshape(12,4)] 
+print('Coef RR:', res_ridge[0] )
+print('Error RR: ', res_ridge[1])
+print('R2 RR: ', res_ridge[2])
+print('R2_train RR: ', res_ridge[3])
+print('score: ', res_ridge[4]) 
 
-
- 
-X_train, X_test, y_train, y_test = train_test_split(XX_stand, y, random_state=1)    
-
+#******** test formula
 
 max_iters = 1000
 gamma = 0.1  
+
+
+print('******** TEST formula ********')
+
+XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(X_df).reshape(12,4)] 
+X_train, X_test, y_train, y_test = train_test_split(XX_stand, y, random_state=1)    
+
 gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_stand, np.array([0,0,0,0,0]), max_iters, gamma)   
-r2_score(preprocessing.scale(y), np.dot(XX_stand,gradient_w))
-
-
+r2all = r2_score(preprocessing.scale(y), np.dot(XX_stand,gradient_w))
+print('GD R2 ALL: ', r2all)
 gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y_train), X_train, np.array([0,0,0,0,0]), max_iters, gamma)             
-r2_score(preprocessing.scale(y_train), np.dot(X_train,gradient_w))
- 
+r2train = r2_score(preprocessing.scale(y_train), np.dot(X_train,gradient_w))
+print('GD R2 train: ', r2train ) 
+
  
 res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
-r2_score(preprocessing.scale(y_train), np.dot(X_train,res_ridge[0]))
-
+rr2RRtrain = 2_score(preprocessing.scale(y_train), np.dot(X_train,res_ridge[0]))
+print('R2 RR train: ', r2RRtrain)
 
 print('Coef RR:', res_ridge[0] )
 print('Error RR: ', res_ridge[1])
