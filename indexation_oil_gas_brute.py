@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Apr 19 11:12:50 2018
+Created on Fri Apr 27 13:39:38 2018
 
 @author: fabdellah
 """
+
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Apr 18 16:54:03 2018
+
+@author: fabdellah
+"""
+
+
 
 
 import matplotlib.pyplot as plt
@@ -234,12 +243,16 @@ def MA_plot(df1, start_date_str,end_date_str, lag, ma_period,reset_period):
     
 def polynomial(X):    
     poly = PolynomialFeatures(degree=2, interaction_only=True)
-    return poly.fit_transform(X)              
+    return poly.fit_transform(X)       
+ 
 
+
+ 
+ 
 
 class class_alternate(object):
     
-    def __init__(self, df_oil, df_power, df_coal, df_gas, y, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef):
+    def __init__(self, df_oil, df_gas, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef):
             self.max_lag = max_lag
             self.max_ma_period = max_ma_period
             self.max_reset_period = max_reset_period
@@ -247,22 +260,20 @@ class class_alternate(object):
             self.nbr_iterations = nbr_iterations
  
             self.nbr_months_per_year = nbr_months_per_year
-            self.bounds = [(1, self.max_lag),(1, self.max_lag),(1, self.max_lag),(1, self.max_lag), (1, self.max_ma_period), (1, self.max_ma_period),(1, self.max_ma_period),(1, self.max_ma_period),(2, self.max_reset_period),(2, self.max_reset_period),(2, self.max_reset_period),(2, self.max_reset_period)]
+            self.bounds = [(1, self.max_lag), (1, self.max_ma_period), (2, self.max_reset_period)]
               
             self.df_oil = df_oil
-            self.df_power = df_power
-            self.df_coal = df_coal
             self.df_gas = df_gas
-            self.y = y
-            
+
             self.start_date_str = start_date_str                                             #start_date_str = '2016-01-31 00:00:00'
             self.start_date = datetime.strptime(self.start_date_str,"%Y-%m-%d %H:%M:%S") 
             self.end_date_str = end_date_str                                                 #end_date_str = '2017-01-31 00:00:00'
             self.end_date = datetime.strptime(self.end_date_str,"%Y-%m-%d %H:%M:%S") 
             
-            self.init_coef = init_coef #np.array([init_coef,init_coef,init_coef,init_coef,init_coef])
+            self.rranges = (slice(1, self.max_lag, 1),slice(1, self.max_lag, 1), slice(1, self.max_ma_period, 1),slice(1, self.max_ma_period, 1), slice(3, max_reset_period, 3),slice(3, max_reset_period, 3))
+            self.init_coef = init_coef
             
-    def MA_func_vect(self, lag_oil, lag_power, lag_coal, lag_gas, ma_period_oil, ma_period_power, ma_period_coal, ma_period_gas, reset_period_oil, reset_period_power, reset_period_coal, reset_period_gas ,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
+    def MA_func_vect(self, lag_oil, lag_gas, ma_period_oil, ma_period_gas, reset_period_oil, reset_period_gas ,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
         
         start_date_oil = self.start_date - relativedelta(months=int(round(lag_oil))) - relativedelta(months=int(round(ma_period_oil) ))            
         end_date =   self.end_date + relativedelta(months=int(round(lag_oil))) + relativedelta(months=int(round(ma_period_oil) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
@@ -270,23 +281,7 @@ class class_alternate(object):
         mask = (self.df_oil['date'] >= start_date_oil) & (self.df_oil['date'] <= end_date)
         df_xoil = self.df_oil.loc[mask].reset_index()  
         df_xoil.drop('index', axis=1, inplace=True)    
-        df_xoil.iloc[:, [1]] = df_xoil.iloc[:, [1]].astype(float)          
-                
-        start_date_power = self.start_date - relativedelta(months=int(round(lag_power))) - relativedelta(months=int(round(ma_period_power) ))            
-        end_date =   self.end_date + relativedelta(months=int(round(lag_power))) + relativedelta(months=int(round(ma_period_power) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
-        self.df_power['date'] = pd.to_datetime(self.df_power['date'])  
-        mask = (self.df_power['date'] >= start_date_power) & (self.df_power['date'] <= end_date)
-        df_xpower = self.df_power.loc[mask].reset_index()  
-        df_xpower.drop('index', axis=1, inplace=True)    
-        df_xpower.iloc[:, [1]] = df_xpower.iloc[:, [1]].astype(float)            
-    
-        start_date_coal = self.start_date - relativedelta(months=int(round(lag_coal))) - relativedelta(months=int(round(ma_period_coal) ))            
-        end_date =   self.end_date + relativedelta(months=int(round(lag_coal))) + relativedelta(months=int(round(ma_period_coal) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
-        self.df_coal['date'] = pd.to_datetime(self.df_coal['date'])  
-        mask = (self.df_coal['date'] >= start_date_coal) & (self.df_coal['date'] <= end_date)
-        df_xcoal = self.df_coal.loc[mask].reset_index()  
-        df_xcoal.drop('index', axis=1, inplace=True)    
-        df_xcoal.iloc[:, [1]] = df_xcoal.iloc[:, [1]].astype(float)          
+        df_xoil.iloc[:, [1]] = df_xoil.iloc[:, [1]].astype(float)                          
       
         start_date_gas = self.start_date - relativedelta(months=int(round(lag_gas))) - relativedelta(months=int(round(ma_period_gas) ))            
         end_date =   self.end_date + relativedelta(months=int(round(lag_gas))) + relativedelta(months=int(round(ma_period_gas) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
@@ -297,20 +292,14 @@ class class_alternate(object):
         df_xgas.iloc[:, [1]] = df_xgas.iloc[:, [1]].astype(float)             
         
         ma_monthly_oil = pd.rolling_mean(df_xoil.set_index('date').resample('1BM'),window=int(round(ma_period_oil))).dropna(how='any').reset_index().iloc[0:12, [1]].values
-        ma_monthly_power = pd.rolling_mean(df_xpower.set_index('date').resample('1BM'),window=int(round(ma_period_power))).dropna(how='any').reset_index().iloc[0:12, [1]].values
-        ma_monthly_coal = pd.rolling_mean(df_xcoal.set_index('date').resample('1BM'),window=int(round(ma_period_coal))).dropna(how='any').reset_index().iloc[0:12, [1]].values
         ma_monthly_gas = pd.rolling_mean(df_xgas.set_index('date').resample('1BM'),window=int(round(ma_period_gas))).dropna(how='any').reset_index().iloc[0:12, [1]].values
         
         
         ma_vect_oil = [ ma_monthly_oil[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_oil ))) ]
-        ma_vect_power = [ ma_monthly_power[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_power ))) ]
-        ma_vect_coal = [ ma_monthly_coal[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_coal ))) ]
         ma_vect_gas = [ ma_monthly_gas[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_gas ))) ]
    
     
         nbr_reset_periods_oil = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_oil))))  
-        nbr_reset_periods_power = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_power))))
-        nbr_reset_periods_coal = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_coal))))
         nbr_reset_periods_gas = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_gas))))
         
         
@@ -318,52 +307,42 @@ class class_alternate(object):
         for i in range(0,nbr_reset_periods_oil):
             vect_oil = np.append(vect_oil , ma_vect_oil[i]*np.ones(int(round(reset_period_oil))))      
         
-        vect_power = np.empty(0)
-        for i in range(0,nbr_reset_periods_power):
-            vect_power = np.append(vect_power , ma_vect_power[i]*np.ones(int(round(reset_period_power))))      
-       
-        
-        vect_coal = np.empty(0)
-        for i in range(0,nbr_reset_periods_coal):
-            vect_coal = np.append(vect_coal , ma_vect_coal[i]*np.ones(int(round(reset_period_coal))))      
-
-        
         vect_gas = np.empty(0)
         for i in range(0,nbr_reset_periods_gas):
             vect_gas = np.append(vect_gas , ma_vect_gas[i]*np.ones(int(round(reset_period_gas))))      
 
         vect_oil = vect_oil[0:12]
-        vect_power = vect_power[0:12]
-        vect_coal = vect_coal[0:12]
         vect_gas = vect_gas[0:12]
         
-        vect = np.c_[np.array(vect_oil) ,np.array(vect_power) , np.array(vect_coal) , np.array(vect_gas) ]
+        vect = np.c_[np.array(vect_oil) , np.array(vect_gas) ]
         
         return vect
     
         
     def func_lag_period(self, parameters, *data):
         
-        lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas = parameters
-        df_oil , df_power , df_coal , df_gas , coef, values = data
-        values = compute_mse(preprocessing.scale(self.y) ,np.c_[np.ones(12), preprocessing.scale(self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0)))]   , coef) 
+        lag_oil,  lag_gas, period_oil, period_gas, reset_oil,  reset_gas = parameters
+        df_oil , df_gas , y, coef, values = data
+        values = compute_mse( preprocessing.scale(y) ,np.c_[np.ones(12),  preprocessing.scale(self.MA_func_vect(lag_oil, lag_gas, period_oil, period_gas, reset_oil,  reset_gas, np.empty(0))) ], coef) 
         return values
 
 
-    def de_optimization(self, coef):
+    def brute_optimization(self, y, coef):
                 
-        args = (self.df_oil,self.df_power,self.df_coal,self.df_gas, coef, np.empty(1))
-        result =differential_evolution(self.func_lag_period,  self.bounds, args=args)
-        lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas = result.x                           #pas sure
-         
-        return lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas
+        args = (self.df_oil,self.df_gas, y, coef, np.empty(1))
+        lag_oil, lag_gas, ma_period_oil, ma_period_gas,reset_period_oil, reset_period_gas = optimize.brute(self.func_lag_period, self.rranges, args=args, full_output=True,
+                              finish=optimize.fmin)[0]
+        #lag = resbrute[0][0:1]   #pas sure
+        #ma_period = resbrute[0][2:3] 
+        #reset_period = resbrute[0][4:5] 
+        return lag_oil, lag_gas, ma_period_oil, ma_period_gas,reset_period_oil, reset_period_gas
+        
     
     def alternate(self):
         max_iters = 100
         gamma = 0.1
         coef =  self.init_coef
         gradient_w = self.init_coef
-        
         for itera in range(self.nbr_iterations):
             
             print('///////////////////////////////////////')
@@ -372,22 +351,18 @@ class class_alternate(object):
             #process 1: opt lag and opt period given coef
             
             t00 = time()
-            lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas = self.de_optimization(coef)
+            lag_oil, lag_gas, ma_period_oil, ma_period_gas,reset_period_oil, reset_period_gas = self.brute_optimization(y,coef)
             t11 = time()
             d1 = t11-t00
-            lag = np.array([lag_oil, lag_power, lag_coal, lag_gas])
-            ma_period = np.array([period_oil, period_power, period_coal, period_gas])
-            reset_period = np.array([reset_oil, reset_power, reset_coal, reset_gas])
             print ("Duration of process 1 in Seconds %6.3f" %d1)      
             
             #process2: opt coeff given lag and period 
             t02 = time()
-            X_df = self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0))     
-            #XX = np.c_[np.ones(X_df.shape[0]),X_df]  
-            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,4)] 
+            X_df = self.MA_func_vect(lag_oil, lag_gas, ma_period_oil, ma_period_gas,reset_period_oil, reset_period_gas ,np.empty(0))     
+            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,2)] 
             w_initial = gradient_w
-            gradient_loss, gradient_w = gradient_descent(preprocessing.scale(self.y), XX_stand, w_initial, max_iters, gamma)            
-            X_train, X_test, y_train, y_test = train_test_split(XX_stand, preprocessing.scale(self.y), random_state=1)
+            gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_stand, w_initial, max_iters, gamma)            
+            X_train, X_test, y_train, y_test = train_test_split(XX_stand, preprocessing.scale(y), random_state=1)
             
             res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
              
@@ -397,7 +372,7 @@ class class_alternate(object):
             print('Coef GD:', gradient_w )
             print('Error GD:', metrics.mean_squared_error(y_test, y_pred_GD))
             print('R2_test GD', r2_score(y_test, y_pred_GD)  )
-            print('R2_all_matrix GD', r2_score(preprocessing.scale(self.y), np.dot(XX_stand,gradient_w))  )
+            print('R2_all_matrix GD', r2_score(preprocessing.scale(y), np.dot(XX_stand,gradient_w))  )
             
             
             print('---------')
@@ -410,55 +385,35 @@ class class_alternate(object):
             t12 = time()
             d2 = t12-t02
             print ("Duration of process 2 in Seconds %6.3f" % d2)        
-                
+            
+            lag = np.c_[lag_oil, lag_gas]
+            ma_period = np.c_[ma_period_oil, ma_period_gas]
+            reset_period = np.c_[reset_period_oil, reset_period_gas]
         return coef , lag , ma_period, reset_period ,X_df, XX_stand, X_train, X_test, y_train, y_test
            
+        
 
 
 if __name__ == '__main__':
     
     #Step 1: optimizing lag, ma_period, reset_period and get the coefficients     
-    #df_oil, df_power, df_coal, df_gas, y, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef
-    optimization = class_alternate(df_oil, df_power ,df_coal ,df_gas,y ,'2016-01-31 00:00:00','2017-01-31 00:00:00', 12, 4, 12 , 12, 7, np.array([0,0.0077,0.0014,0.0026,0.0032]))
+    #df_oil, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef
+    optimization = class_alternate(df_oil, df_gas ,'2016-01-31 00:00:00','2017-01-31 00:00:00', 12, 5, 4 , 3, 6, np.array([0,0,0]))
     t0 = time()
-    coef , lag , ma_period, reset_period , X_df, XX_stand, X_train, X_test, y_train, y_test = optimization.alternate()    
+    coef , lag , ma_period, reset_period ,X_df, XX_stand,  X_train, X_test, y_train, y_test   = optimization.alternate()    
     t1 = time()
     d = t1 - t0
     print ("Total duration in Seconds %6.3f" % d)               
     print('final coef: ', coef)
     
-   
+    
+    MA_plot(df_oil, '2016-01-31 00:00:00','2017-01-31 00:00:00', lag , ma_period, reset_period)
+    
+    lag=1
+    ma_period = 2
+    reset_period = 2
+    
+    v = optimization.MA_func_vect(lag, ma_period,reset_period, np.empty(0))
     
     
     
- 
-
-#XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(df_monthly).reshape(12,4)] 
-XX_stand = np.c_[np.ones(df_monthly.shape[0]), preprocessing.scale(X_df).reshape(12,4)] 
-
-
- 
-X_train, X_test, y_train, y_test = train_test_split(XX_stand, y, random_state=1)    
-
-
-max_iters = 1000
-gamma = 0.1  
-gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y), XX_stand, np.array([0,0,0,0,0]), max_iters, gamma)   
-r2_score(preprocessing.scale(y), np.dot(XX_stand,gradient_w))
-
-
-gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y_train), X_train, np.array([0,0,0,0,0]), max_iters, gamma)             
-r2_score(preprocessing.scale(y_train), np.dot(X_train,gradient_w))
- 
- 
-res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
-r2_score(preprocessing.scale(y_train), np.dot(X_train,res_ridge[0]))
-
-
-print('Coef RR:', res_ridge[0] )
-print('Error RR: ', res_ridge[1])
-print('R2 RR: ', res_ridge[2])
-print('R2_train RR: ', res_ridge[3])
-print('score: ', res_ridge[4]) 
-
-
