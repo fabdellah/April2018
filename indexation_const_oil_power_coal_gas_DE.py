@@ -26,6 +26,11 @@ from sklearn import datasets, linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn import preprocessing
+from sklearn import datasets, linear_model
+from sklearn.linear_model import LinearRegression
+import statsmodels.api as sm
+from scipy import stats
+
 
 # Import data
 file = 'External_Data.xls'
@@ -37,16 +42,24 @@ df_subset = df_subset[3:col]
 russia_Index = df_subset[['Data Type','USD.20']].reset_index()[2:df_subset.shape[0]]
 russia_Index.drop('index', axis=1, inplace=True)
 russia_Index = russia_Index.reset_index()
+russia_Index.drop('index', axis=1, inplace=True)
+russia_Index.columns = ['date', 'index']
+
+start_date_index = '2015M1'                                                                 # Select dates for Russia's index
+end_date_index = '2016M1'
+start_indices = list(np.where(russia_Index["date"] == start_date_index)[0])[0]
+end_indices = list(np.where(russia_Index["date"] == end_date_index)[0])[0]
+yy = russia_Index.iloc[start_indices:end_indices ]
+y = yy['index']
 
 
-start_date_str = '2015-12-31 00:00:00'
-end_date_str = '2016-12-31 00:00:00'
+
+start_date_str = '2014-12-31 00:00:00'                                                       # Select dates for commodities prices
+end_date_str = '2015-12-31 00:00:00'
+
 start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
 end_date = datetime.strptime(end_date_str,"%Y-%m-%d %H:%M:%S") 
-
 df = pd.read_excel('spot_prices.xls')
-
-
 df_oil = df[['date_oil', 'oil']]
 df_oil.columns = ['date', 'oil']
 df_oil['date'] = pd.to_datetime(df_oil['date'])  
@@ -55,7 +68,6 @@ df_oil_x = df_oil.loc[mask].reset_index()
 df_oil_x.drop('index', axis=1, inplace=True) 
 df_oil_x = df_oil_x.set_index('date')
 df_oil_monthly = df_oil_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
-
 
 df_power = df[['date_power', 'power']]
 df_power.columns = ['date', 'power']
@@ -66,8 +78,6 @@ df_power_x.drop('index', axis=1, inplace=True)
 df_power_x = df_power_x.set_index('date')
 df_power_monthly = df_power_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
 
-
-
 df_coal = df[['date_coal', 'coal']]
 df_coal.columns = ['date', 'coal']
 df_coal['date'] = pd.to_datetime(df_coal['date'])  
@@ -76,8 +86,6 @@ df_coal_x = df_coal.loc[mask].reset_index()
 df_coal_x.drop('index', axis=1, inplace=True) 
 df_coal_x = df_coal_x.set_index('date')
 df_coal_monthly = df_coal_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
-
-
 
 df_gas = df[['date_gas', 'gas']]
 df_gas.columns = ['date', 'gas']
@@ -88,14 +96,10 @@ df_gas_x.drop('index', axis=1, inplace=True)
 df_gas_x = df_gas_x.set_index('date')
 df_gas_monthly = df_gas_x.resample("M", how='mean').reset_index().iloc[1:13,:]   
 
-
 df_monthly = np.c_[df_oil_monthly['oil'] , df_power_monthly['power'] , df_coal_monthly['coal'] , df_gas_monthly['gas'] ]
 
-yy = russia_Index[225:237]           #monthly data from 2016 to 2017
-yy = yy.reset_index()  
-yy.drop('index', axis=1, inplace=True)
-yy.drop('level_0', axis=1, inplace=True)
-y = yy['USD.20']
+
+
 
 
 
@@ -134,6 +138,11 @@ def compute_gradient(y, tx, w):
 def predict(tx,coef):
     return np.dot(tx,coef)
     
+   
+def polynomial(X):    
+    poly = PolynomialFeatures(degree=2, interaction_only=True)
+    return poly.fit_transform(X)  
+
 
 def gradient_descent(y, tx, initial_w, max_iters, gamma):
     """Gradient descent algorithm for linear regression."""
@@ -176,8 +185,7 @@ def linear_regression(X_train,y_train, X_test, y_test):
     regr = linear_model.LinearRegression() 
     regr.fit(X_train, y_train)  
     y_pred = regr.predict(X_test)    
-    err =  mean_squared_error(y_test,y_pred)
-    
+    err =  mean_squared_error(y_test,y_pred)  
     # Explained variance score: 1 is perfect prediction
     r2 = r2_score(y_test, y_pred)
     r2_train = r2_score(y_train, regr.predict(X_train))
@@ -185,7 +193,16 @@ def linear_regression(X_train,y_train, X_test, y_test):
     
 
 
-    
+def OLS_stat(X,y):
+    """Summary statistics for OLS."""
+    est = sm.OLS(y, X)
+    est2 = est.fit()
+    print(est2.summary())
+
+
+
+
+
 def MA_func_vect_out(df1, start_date_str,end_date_str, lag, ma_period,reset_period,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
     nbr_months_per_year = 12
     start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
@@ -199,11 +216,11 @@ def MA_func_vect_out(df1, start_date_str,end_date_str, lag, ma_period,reset_peri
     df_x.iloc[:, [1]]= df_x.iloc[:, [1]].astype(float)   
     ma_monthly = pd.rolling_mean(df_x.set_index('date').resample('1BM'),window=int(round(ma_period))).dropna(how='any').reset_index().iloc[0:12, [1]].values
     ma_vect = [ ma_monthly[i] for i in range(0,nbr_months_per_year,int(round(reset_period))) ]
-    nbr_months_per_year = 12
-    nbr_reset_periods = int(nbr_months_per_year/reset_period)
+    nbr_reset_periods = int(math.ceil(nbr_months_per_year/int(round(reset_period))))  
     vect = np.empty(0)
     for i in range(0,nbr_reset_periods):
-        vect = np.append(vect , ma_vect[i]*np.ones(int(round(reset_period))))      
+        vect = np.append(vect , ma_vect[i]*np.ones(int(round(reset_period))))    
+    vect = vect[0:12]    
     return vect
      
 
@@ -216,11 +233,11 @@ def MA_plot(df1, start_date_str,end_date_str, lag, ma_period,reset_period):
     plt.xlabel('Time')
     plt.ylabel('Average level')
     plt.show()
- 
-    
-def polynomial(X):    
-    poly = PolynomialFeatures(degree=2, interaction_only=True)
-    return poly.fit_transform(X)              
+
+
+
+
+
 
 
 class class_alternate(object):
@@ -233,7 +250,7 @@ class class_alternate(object):
             self.nbr_iterations = nbr_iterations
  
             self.nbr_months_per_year = nbr_months_per_year
-            self.bounds = [(1, self.max_lag),(1, self.max_lag),(1, self.max_lag),(1, self.max_lag), (1, self.max_ma_period), (1, self.max_ma_period),(1, self.max_ma_period),(1, self.max_ma_period),(2, self.max_reset_period),(2, self.max_reset_period),(2, self.max_reset_period),(2, self.max_reset_period)]
+            self.bounds = [(0, self.max_lag),(0, self.max_lag),(0, self.max_lag),(0, self.max_lag), (1, self.max_ma_period), (1, self.max_ma_period),(1, self.max_ma_period),(1, self.max_ma_period),(1, self.max_reset_period),(1, self.max_reset_period),(1, self.max_reset_period),(1, self.max_reset_period)]
               
             self.df_oil = df_oil
             self.df_power = df_power
@@ -248,8 +265,9 @@ class class_alternate(object):
             
             self.init_coef = init_coef 
             
+            
     def MA_func_vect(self, lag_oil, lag_power, lag_coal, lag_gas, ma_period_oil, ma_period_power, ma_period_coal, ma_period_gas, reset_period_oil, reset_period_power, reset_period_coal, reset_period_gas ,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
-        """Returns the input matrix with the optimal lag, ma_period and reset_period. This matrix is used for the regression in process 2."""
+        """Returns the input matrix computed with the optimal lag, ma_period and reset_period. This matrix is used for the regression in process 2."""
         start_date_oil = self.start_date - relativedelta(months=int(round(lag_oil))) - relativedelta(months=int(round(ma_period_oil) ))            
         end_date =   self.end_date + relativedelta(months=int(round(lag_oil))) + relativedelta(months=int(round(ma_period_oil) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
         self.df_oil['date'] = pd.to_datetime(self.df_oil['date'])  
@@ -368,25 +386,27 @@ class class_alternate(object):
             X_df = self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0))     
             XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,4)] 
             w_initial = gradient_w
-            gradient_loss, gradient_w = gradient_descent(preprocessing.scale(self.y), XX_stand, w_initial, max_iters, gamma)            
             X_train, X_test, y_train, y_test = train_test_split(XX_stand, preprocessing.scale(self.y), random_state=1)
             
+            gradient_loss, gradient_w = gradient_descent(preprocessing.scale(y_train), X_train, w_initial, max_iters, gamma)  
             res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
              
             # update coef
             coef = res_ridge[0]
             y_pred_GD = np.dot(X_test,gradient_w)
+            print('--------- Gradient descent ---------')
             print('Coef GD:', gradient_w )
             print('Error GD:', metrics.mean_squared_error(y_test, y_pred_GD))
+            print('R2_train GD', r2_score(preprocessing.scale(y_train), np.dot(X_train,gradient_w))  )
             print('R2_test GD', r2_score(y_test, y_pred_GD)  )
-            print('R2_all_matrix GD', r2_score(preprocessing.scale(self.y), np.dot(XX_stand,gradient_w))  )
-                     
-            print('---------')
+                                
+            print('--------- Ridge regression ---------')
             
             print('Coef RR:', res_ridge[0] )
             print('Error RR: ', res_ridge[1])
-            print('R2 RR: ', res_ridge[2])
             print('R2_train RR: ', res_ridge[3])
+            print('R2_test RR: ', res_ridge[2])
+            
             t12 = time()
             d2 = t12-t02
             print ("Duration of process 2 in Seconds %6.3f" % d2)        
@@ -398,8 +418,9 @@ class class_alternate(object):
 if __name__ == '__main__':
     
     #Step 1: optimizing lag, ma_period, reset_period and get the coefficients     
+    
                                    #df_oil, df_power, df_coal, df_gas, y, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef
-    optimization = class_alternate(df_oil, df_power ,df_coal ,df_gas,y ,'2016-01-31 00:00:00','2017-01-31 00:00:00', 12, 20, 12 , 12, 7, np.array([0,0.0077,0.0014,0.0026,0.0032]))
+    optimization = class_alternate(df_oil, df_power ,df_coal ,df_gas,y ,'2015-01-31 00:00:00','2016-01-31 00:00:00', 12, 16, 12 , 12, 7, np.array([0,0,0,0,0]))
     t0 = time()
     coef , lag , ma_period, reset_period , X_df, XX_stand, X_train, X_test, y_train, y_test = optimization.alternate()    
     t1 = time()
@@ -407,5 +428,47 @@ if __name__ == '__main__':
     print ("Total duration in Seconds %6.3f" % d)               
     print('final coef: ', coef)
     
-   
+    
+    
+    OLS_stat(XX_stand,preprocessing.scale(y))
+    
+    
+    
+    
+    
+    
+    # Testing 
+    
+        
+    start_date_index = '2016M1'                                                                
+    end_date_index = '2017M1'
+    start_indices = list(np.where(russia_Index["date"] == start_date_index)[0])[0]
+    end_indices = list(np.where(russia_Index["date"] == end_date_index)[0])[0]
+    yy_test = russia_Index.iloc[start_indices:end_indices ]
+    y_test = yy_test['index']
+    
+    
+    start_day = '2016-01-31 00:00:00'
+    end_day = '2017-01-31 00:00:00'
+    oil_test = MA_func_vect_out(df_oil, start_day , end_day , lag[0] , ma_period[0] , reset_period[0] , np.empty(0))
+    power_test = MA_func_vect_out(df_power, start_day , end_day , lag[1],ma_period[1], reset_period[1] , np.empty(0))
+    coal_test = MA_func_vect_out(df_coal, start_day , end_day , lag[2], ma_period[2], reset_period[2] , np.empty(0))
+    gas_test = MA_func_vect_out(df_gas, start_day , end_day , lag[3],ma_period[3], reset_period[3] , np.empty(0))
+    
+    X_test = np.c_[oil_test, power_test, coal_test, gas_test]
+    X_test_stand = np.c_[np.ones(X_test.shape[0]), preprocessing.scale(X_test).reshape(12,4)]   
+    OLS_stat(X_test_stand ,preprocessing.scale(y))
+    
+    error_test = compute_mse(preprocessing.scale(y), X_test_stand, coef)
+    
+    
+    score(XX_stand,preprocessing.scale(y), X_test_stand, preprocessing.scale(y_test),coef )
+    
+    
+    
+    
+    
+    #Step 2: Model calibration
+    
+    #Step 3: Monte Carlo for gas storage
    
