@@ -44,17 +44,26 @@ russia_Index.drop('index', axis=1, inplace=True)
 russia_Index = russia_Index.reset_index()
 russia_Index.drop('index', axis=1, inplace=True)
 russia_Index.columns = ['date', 'index']
+start_date_data = '1997-04-01 00:00:00'    
+base =  datetime.strptime(start_date_data,"%Y-%m-%d %H:%M:%S")
+nbr_months_per_data = 243
+date_list = [base + relativedelta(months=x) for x in range(0, nbr_months_per_data)]
+russia_Index['date'] = date_list
 
-start_date_index = '2015M1'                                                                 # Select dates for Russia's index
-end_date_index = '2016M1'
-start_indices = list(np.where(russia_Index["date"] == start_date_index)[0])[0]
-end_indices = list(np.where(russia_Index["date"] == end_date_index)[0])[0]
-yy = russia_Index.iloc[start_indices:end_indices ]
-y = yy['index']
+start_date_index = '2010-01-01 00:00:00'                                                                   # Select dates for Russia's index
+end_date_index = '2015-12-01 00:00:00'  
+mask = (russia_Index['date'] >= start_date_index) & (russia_Index['date'] <= end_date_index)
+russia_Index_x = russia_Index.loc[mask].reset_index()  
+russia_Index_x.drop('level_0', axis=1, inplace=True) 
+#russia_Index_x = russia_Index_x.set_index('date')
+y = russia_Index_x['index']
 
 
 
-start_date_str = '2014-12-31 00:00:00'                                                       # Select dates for commodities prices
+
+
+
+start_date_str = '2009-12-31 00:00:00'                                                       # Select dates for commodities prices
 end_date_str = '2015-12-31 00:00:00'
 
 start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
@@ -100,7 +109,56 @@ df_monthly = np.c_[df_oil_monthly['oil'] , df_power_monthly['power'] , df_coal_m
 
 
 
+############################## df_monthly_test
 
+
+start_date_str = '2013-12-31 00:00:00'                                                       # Select dates for commodities prices
+end_date_str = '2015-12-31 00:00:00'
+
+start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
+end_date = datetime.strptime(end_date_str,"%Y-%m-%d %H:%M:%S") 
+df_test = pd.read_excel('spot_prices.xls')
+df_oil_test = df_test[['date_oil', 'oil']]
+df_oil_test.columns = ['date', 'oil']
+df_oil_test['date'] = pd.to_datetime(df_oil_test['date'])  
+mask = (df_oil_test['date'] >= start_date) & (df_oil_test['date'] <= end_date)
+df_oil_x_test = df_oil_test.loc[mask].reset_index()  
+df_oil_x_test.drop('index', axis=1, inplace=True) 
+df_oil_x_test = df_oil_x_test.set_index('date')
+df_oil_monthly_test = df_oil_x_test.resample("M", how='mean').reset_index().iloc[1:13,:]    
+
+df_power_test = df_test[['date_power', 'power']]
+df_power_test.columns = ['date', 'power']
+df_power_test['date'] = pd.to_datetime(df_power_test['date'])  
+mask = (df_power_test['date'] >= start_date) & (df_power_test['date'] <= end_date)
+df_power_x_test = df_power_test.loc[mask].reset_index()  
+df_power_x_test.drop('index', axis=1, inplace=True) 
+df_power_x_test = df_power_x_test.set_index('date')
+df_power_monthly_test = df_power_x_test.resample("M", how='mean').reset_index().iloc[1:13,:]    
+
+df_coal_test = df_test[['date_coal', 'coal']]
+df_coal_test.columns = ['date', 'coal']
+df_coal_test['date'] = pd.to_datetime(df_coal_test['date'])  
+mask = (df_coal_test['date'] >= start_date) & (df_coal_test['date'] <= end_date)
+df_coal_x_test = df_coal_test.loc[mask].reset_index()  
+df_coal_x_test.drop('index', axis=1, inplace=True) 
+df_coal_x_test = df_coal_x_test.set_index('date')
+df_coal_monthly_test = df_coal_x_test.resample("M", how='mean').reset_index().iloc[1:13,:]    
+
+df_gas_test = df_test[['date_gas', 'gas']]
+df_gas_test.columns = ['date', 'gas']
+df_gas_test['date'] = pd.to_datetime(df_gas_test['date'])  
+mask = (df_gas_test['date'] >= start_date) & (df_gas_test['date'] <= end_date)
+df_gas_x_test = df_gas_test.loc[mask].reset_index()  
+df_gas_x_test.drop('index', axis=1, inplace=True) 
+df_gas_x_test = df_gas_x_test.set_index('date')
+df_gas_monthly_test = df_gas_x_test.resample("M", how='mean').reset_index().iloc[1:13,:]   
+
+df_monthly_test = np.c_[df_oil_monthly_test['oil'] , df_power_monthly_test['power'] , df_coal_monthly_test['coal'] , df_gas_monthly_test['gas'] ]
+
+X_monthly_test = np.c_[np.ones(12), preprocessing.scale(df_monthly_test)]
+
+####################################
 
 
 
@@ -203,8 +261,7 @@ def OLS_stat(X,y):
 
 
 
-def MA_func_vect_out(df1, start_date_str,end_date_str, lag, ma_period,reset_period,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
-    nbr_months_per_year = 12
+def MA_func_vect_out(nbr_months_per_data, df1, start_date_str,end_date_str, lag, ma_period,reset_period,vect): #vect=np.empty(0) 
     start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
     end_date = datetime.strptime(end_date_str,"%Y-%m-%d %H:%M:%S") 
     start_date_x = start_date - relativedelta(months=int(round(lag))) - relativedelta(months=int(round(ma_period) ))            
@@ -214,20 +271,20 @@ def MA_func_vect_out(df1, start_date_str,end_date_str, lag, ma_period,reset_peri
     df_x = df1.loc[mask].reset_index()  
     df_x.drop('index', axis=1, inplace=True)    
     df_x.iloc[:, [1]]= df_x.iloc[:, [1]].astype(float)   
-    ma_monthly = pd.rolling_mean(df_x.set_index('date').resample('1BM'),window=int(round(ma_period))).dropna(how='any').reset_index().iloc[0:12, [1]].values
-    ma_vect = [ ma_monthly[i] for i in range(0,nbr_months_per_year,int(round(reset_period))) ]
-    nbr_reset_periods = int(math.ceil(nbr_months_per_year/int(round(reset_period))))  
+    ma_monthly = pd.rolling_mean(df_x.set_index('date').resample('1BM'),window=int(round(ma_period))).dropna(how='any').reset_index().iloc[0:nbr_months_per_data, [1]].values
+    ma_vect = [ ma_monthly[i] for i in range(0,nbr_months_per_data,int(round(reset_period))) ]
+    nbr_reset_periods = int(math.ceil(nbr_months_per_data/int(round(reset_period))))  
     vect = np.empty(0)
     for i in range(0,nbr_reset_periods):
         vect = np.append(vect , ma_vect[i]*np.ones(int(round(reset_period))))    
-    vect = vect[0:12]    
+    vect = vect[0:nbr_months_per_data]    
     return vect
      
 
 def MA_plot(df1, start_date_str,end_date_str, lag, ma_period,reset_period):    
-    nbr_months_per_year = 12
+    nbr_months_per_data = 24
     vect = MA_func_vect_out(df1, start_date_str,end_date_str, lag, ma_period,reset_period,np.empty(0))
-    time = np.arange(0,nbr_months_per_year)
+    time = np.arange(0,nbr_months_per_data)
     plt.plot(time, vect)   
     plt.title('Moving average: Lag = '+str(lag)+ ' MA period = '+ str(ma_period)+ ' Reset period = '+ str(reset_period)  )
     plt.xlabel('Time')
@@ -242,14 +299,14 @@ def MA_plot(df1, start_date_str,end_date_str, lag, ma_period,reset_period):
 
 class class_alternate(object):
     
-    def __init__(self, df_oil, df_power, df_coal, df_gas, y, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef):
+    def __init__(self, df_oil, df_power, df_coal, df_gas, y, start_date_str,end_date_str, nbr_months_per_data, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef):
             self.max_lag = max_lag
             self.max_ma_period = max_ma_period
             self.max_reset_period = max_reset_period
             
             self.nbr_iterations = nbr_iterations
  
-            self.nbr_months_per_year = nbr_months_per_year
+            self.nbr_months_per_data = nbr_months_per_data
             self.bounds = [(0, self.max_lag),(0, self.max_lag),(0, self.max_lag),(0, self.max_lag), (1, self.max_ma_period), (1, self.max_ma_period),(1, self.max_ma_period),(1, self.max_ma_period),(1, self.max_reset_period),(1, self.max_reset_period),(1, self.max_reset_period),(1, self.max_reset_period)]
               
             self.df_oil = df_oil
@@ -260,7 +317,7 @@ class class_alternate(object):
             
             self.start_date_str = start_date_str                                             #start_date_str = '2016-01-31 00:00:00'
             self.start_date = datetime.strptime(self.start_date_str,"%Y-%m-%d %H:%M:%S") 
-            self.end_date_str = end_date_str                                                 #end_date_str = '2017-01-31 00:00:00'
+            self.end_date_str = end_date_str                                                 #end_date_str   = '2017-01-31 00:00:00'
             self.end_date = datetime.strptime(self.end_date_str,"%Y-%m-%d %H:%M:%S") 
             
             self.init_coef = init_coef 
@@ -269,7 +326,7 @@ class class_alternate(object):
     def MA_func_vect(self, lag_oil, lag_power, lag_coal, lag_gas, ma_period_oil, ma_period_power, ma_period_coal, ma_period_gas, reset_period_oil, reset_period_power, reset_period_coal, reset_period_gas ,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
         """Returns the input matrix computed with the optimal lag, ma_period and reset_period. This matrix is used for the regression in process 2."""
         start_date_oil = self.start_date - relativedelta(months=int(round(lag_oil))) - relativedelta(months=int(round(ma_period_oil) ))            
-        end_date =   self.end_date + relativedelta(months=int(round(lag_oil))) + relativedelta(months=int(round(ma_period_oil) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
+        end_date =   self.end_date + relativedelta(months=int(round(lag_oil))) + relativedelta(months=int(round(ma_period_oil) ))+ relativedelta(months=1) 
         self.df_oil['date'] = pd.to_datetime(self.df_oil['date'])  
         mask = (self.df_oil['date'] >= start_date_oil) & (self.df_oil['date'] <= end_date)
         df_xoil = self.df_oil.loc[mask].reset_index()  
@@ -277,7 +334,7 @@ class class_alternate(object):
         df_xoil.iloc[:, [1]] = df_xoil.iloc[:, [1]].astype(float)          
                 
         start_date_power = self.start_date - relativedelta(months=int(round(lag_power))) - relativedelta(months=int(round(ma_period_power) ))            
-        end_date =   self.end_date + relativedelta(months=int(round(lag_power))) + relativedelta(months=int(round(ma_period_power) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
+        end_date =   self.end_date + relativedelta(months=int(round(lag_power))) + relativedelta(months=int(round(ma_period_power) ))+ relativedelta(months=1) 
         self.df_power['date'] = pd.to_datetime(self.df_power['date'])  
         mask = (self.df_power['date'] >= start_date_power) & (self.df_power['date'] <= end_date)
         df_xpower = self.df_power.loc[mask].reset_index()  
@@ -285,7 +342,7 @@ class class_alternate(object):
         df_xpower.iloc[:, [1]] = df_xpower.iloc[:, [1]].astype(float)            
     
         start_date_coal = self.start_date - relativedelta(months=int(round(lag_coal))) - relativedelta(months=int(round(ma_period_coal) ))            
-        end_date =   self.end_date + relativedelta(months=int(round(lag_coal))) + relativedelta(months=int(round(ma_period_coal) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
+        end_date =   self.end_date + relativedelta(months=int(round(lag_coal))) + relativedelta(months=int(round(ma_period_coal) ))+ relativedelta(months=1) 
         self.df_coal['date'] = pd.to_datetime(self.df_coal['date'])  
         mask = (self.df_coal['date'] >= start_date_coal) & (self.df_coal['date'] <= end_date)
         df_xcoal = self.df_coal.loc[mask].reset_index()  
@@ -293,27 +350,27 @@ class class_alternate(object):
         df_xcoal.iloc[:, [1]] = df_xcoal.iloc[:, [1]].astype(float)          
       
         start_date_gas = self.start_date - relativedelta(months=int(round(lag_gas))) - relativedelta(months=int(round(ma_period_gas) ))            
-        end_date =   self.end_date + relativedelta(months=int(round(lag_gas))) + relativedelta(months=int(round(ma_period_gas) ))+ relativedelta(months=1) #pour avoir 12 valeurs dans ma_vect
+        end_date =   self.end_date + relativedelta(months=int(round(lag_gas))) + relativedelta(months=int(round(ma_period_gas) ))+ relativedelta(months=1) 
         self.df_gas['date'] = pd.to_datetime(self.df_gas['date'])  
         mask = (self.df_gas['date'] >= start_date_gas) & (self.df_gas['date'] <= end_date)
         df_xgas = self.df_gas.loc[mask].reset_index()  
         df_xgas.drop('index', axis=1, inplace=True)    
         df_xgas.iloc[:, [1]] = df_xgas.iloc[:, [1]].astype(float)             
         
-        ma_monthly_oil = pd.rolling_mean(df_xoil.set_index('date').resample('1BM'),window=int(round(ma_period_oil))).dropna(how='any').reset_index().iloc[0:12, [1]].values
-        ma_monthly_power = pd.rolling_mean(df_xpower.set_index('date').resample('1BM'),window=int(round(ma_period_power))).dropna(how='any').reset_index().iloc[0:12, [1]].values
-        ma_monthly_coal = pd.rolling_mean(df_xcoal.set_index('date').resample('1BM'),window=int(round(ma_period_coal))).dropna(how='any').reset_index().iloc[0:12, [1]].values
-        ma_monthly_gas = pd.rolling_mean(df_xgas.set_index('date').resample('1BM'),window=int(round(ma_period_gas))).dropna(how='any').reset_index().iloc[0:12, [1]].values
+        ma_monthly_oil = pd.rolling_mean(df_xoil.set_index('date').resample('1BM'),window=int(round(ma_period_oil))).dropna(how='any').reset_index().iloc[0:self.nbr_months_per_data, [1]].values
+        ma_monthly_power = pd.rolling_mean(df_xpower.set_index('date').resample('1BM'),window=int(round(ma_period_power))).dropna(how='any').reset_index().iloc[0:self.nbr_months_per_data, [1]].values
+        ma_monthly_coal = pd.rolling_mean(df_xcoal.set_index('date').resample('1BM'),window=int(round(ma_period_coal))).dropna(how='any').reset_index().iloc[0:self.nbr_months_per_data, [1]].values
+        ma_monthly_gas = pd.rolling_mean(df_xgas.set_index('date').resample('1BM'),window=int(round(ma_period_gas))).dropna(how='any').reset_index().iloc[0:self.nbr_months_per_data, [1]].values
                 
-        ma_vect_oil = [ ma_monthly_oil[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_oil ))) ]
-        ma_vect_power = [ ma_monthly_power[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_power ))) ]
-        ma_vect_coal = [ ma_monthly_coal[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_coal ))) ]
-        ma_vect_gas = [ ma_monthly_gas[i] for i in range(0,self.nbr_months_per_year,int(round(reset_period_gas ))) ]
+        ma_vect_oil = [ ma_monthly_oil[i] for i in range(0,self.nbr_months_per_data,int(round(reset_period_oil ))) ]
+        ma_vect_power = [ ma_monthly_power[i] for i in range(0,self.nbr_months_per_data,int(round(reset_period_power ))) ]
+        ma_vect_coal = [ ma_monthly_coal[i] for i in range(0,self.nbr_months_per_data,int(round(reset_period_coal ))) ]
+        ma_vect_gas = [ ma_monthly_gas[i] for i in range(0,self.nbr_months_per_data,int(round(reset_period_gas ))) ]
        
-        nbr_reset_periods_oil = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_oil))))  
-        nbr_reset_periods_power = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_power))))
-        nbr_reset_periods_coal = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_coal))))
-        nbr_reset_periods_gas = int(math.ceil(self.nbr_months_per_year/int(round(reset_period_gas))))
+        nbr_reset_periods_oil = int(math.ceil(self.nbr_months_per_data/int(round(reset_period_oil))))  
+        nbr_reset_periods_power = int(math.ceil(self.nbr_months_per_data/int(round(reset_period_power))))
+        nbr_reset_periods_coal = int(math.ceil(self.nbr_months_per_data/int(round(reset_period_coal))))
+        nbr_reset_periods_gas = int(math.ceil(self.nbr_months_per_data/int(round(reset_period_gas))))
                
         vect_oil = np.empty(0)
         for i in range(0,nbr_reset_periods_oil):
@@ -333,10 +390,10 @@ class class_alternate(object):
         for i in range(0,nbr_reset_periods_gas):
             vect_gas = np.append(vect_gas , ma_vect_gas[i]*np.ones(int(round(reset_period_gas))))      
 
-        vect_oil = vect_oil[0:12]
-        vect_power = vect_power[0:12]
-        vect_coal = vect_coal[0:12]
-        vect_gas = vect_gas[0:12]
+        vect_oil = vect_oil[0:self.nbr_months_per_data]
+        vect_power = vect_power[0:self.nbr_months_per_data]
+        vect_coal = vect_coal[0:self.nbr_months_per_data]
+        vect_gas = vect_gas[0:self.nbr_months_per_data]
         
         vect = np.c_[np.array(vect_oil) ,np.array(vect_power) , np.array(vect_coal) , np.array(vect_gas) ]
         
@@ -347,7 +404,7 @@ class class_alternate(object):
         """Objective function to minimize."""
         lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas = parameters
         df_oil , df_power , df_coal , df_gas , coef, values = data
-        values = compute_mse(preprocessing.scale(self.y) ,np.c_[np.ones(12), preprocessing.scale(self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0)))]   , coef) 
+        values = compute_mse(preprocessing.scale(self.y) ,np.c_[np.ones(self.nbr_months_per_data), preprocessing.scale(self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0)))]   , coef) 
         return values
 
 
@@ -355,7 +412,7 @@ class class_alternate(object):
         """Differential evolution for the lag, ma_period and reset_period for oil, power, coal and gas."""        
         args = (self.df_oil,self.df_power,self.df_coal,self.df_gas, coef, np.empty(1))
         result =differential_evolution(self.func_lag_period,  self.bounds, args=args)
-        lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas = result.x                           #pas sure
+        lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas = result.x                          
          
         return lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas
     
@@ -384,7 +441,7 @@ class class_alternate(object):
             #process2: optimal coefficient for a given lag, ma_period and reset period
             t02 = time()
             X_df = self.MA_func_vect(lag_oil, lag_power, lag_coal, lag_gas, period_oil, period_power, period_coal, period_gas, reset_oil, reset_power, reset_coal, reset_gas, np.empty(0))     
-            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_year,4)] 
+            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_data,4)] 
             w_initial = gradient_w
             X_train, X_test, y_train, y_test = train_test_split(XX_stand, preprocessing.scale(self.y), random_state=1)
             
@@ -420,7 +477,7 @@ if __name__ == '__main__':
     #Step 1: optimizing lag, ma_period, reset_period and get the coefficients     
     
                                    #df_oil, df_power, df_coal, df_gas, y, start_date_str,end_date_str, nbr_months_per_year, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef
-    optimization = class_alternate(df_oil, df_power ,df_coal ,df_gas,y ,'2015-01-31 00:00:00','2016-01-31 00:00:00', 12, 16, 12 , 12, 7, np.array([0,0,0,0,0]))
+    optimization = class_alternate(df_oil, df_power ,df_coal ,df_gas,y ,'2010-01-31 00:00:00','2016-01-31 00:00:00', 72, 11, 12 , 12, 7, np.array([0,0,0,0,0]))
     t0 = time()
     coef , lag , ma_period, reset_period , X_df, XX_stand, X_train, X_test, y_train, y_test = optimization.alternate()    
     t1 = time()
@@ -438,14 +495,16 @@ if __name__ == '__main__':
     
     
     # Testing 
-    
-        
-    start_date_index = '2016M1'                                                                
-    end_date_index = '2017M1'
-    start_indices = list(np.where(russia_Index["date"] == start_date_index)[0])[0]
-    end_indices = list(np.where(russia_Index["date"] == end_date_index)[0])[0]
-    yy_test = russia_Index.iloc[start_indices:end_indices ]
-    y_test = yy_test['index']
+    nbr_months_per_testing_data = 12   
+
+    start_date_index = '2016-01-01 00:00:00'                                                                   # Select dates for Russia's index
+    end_date_index = '2016-12-01 00:00:00' 
+    start_date_index = datetime.strptime(start_date_index,"%Y-%m-%d %H:%M:%S") 
+    end_date_index = datetime.strptime(end_date_index,"%Y-%m-%d %H:%M:%S") 
+    mask = (russia_Index['date'] >= start_date_index) & (russia_Index['date'] <= end_date_index)
+    russia_Index_test = russia_Index.loc[mask].reset_index()  
+    russia_Index_test.drop('level_0', axis=1, inplace=True) 
+    y_test = russia_Index_test['index']
     
     
     start_day = '2016-01-31 00:00:00'
@@ -456,13 +515,14 @@ if __name__ == '__main__':
     gas_test = MA_func_vect_out(df_gas, start_day , end_day , lag[3],ma_period[3], reset_period[3] , np.empty(0))
     
     X_test = np.c_[oil_test, power_test, coal_test, gas_test]
-    X_test_stand = np.c_[np.ones(X_test.shape[0]), preprocessing.scale(X_test).reshape(12,4)]   
-    OLS_stat(X_test_stand ,preprocessing.scale(y))
+    X_test_stand = np.c_[np.ones(X_test.shape[0]), preprocessing.scale(X_test).reshape(nbr_months_per_testing_data,4)]   
+    OLS_stat(X_test_stand ,preprocessing.scale(y_test))
     
     error_test = compute_mse(preprocessing.scale(y), X_test_stand, coef)
     
     
     score(XX_stand,preprocessing.scale(y), X_test_stand, preprocessing.scale(y_test),coef )
+    
     
     
     
