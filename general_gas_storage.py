@@ -257,6 +257,7 @@ def decision_volume_2(decision_rule, steps, nbr_simulations, volume_end, alpha, 
 
 
 def hist_with_inj(decision_rule, steps, nbr_simulations,volume_level_stored,  b_example):
+    decision_rule = np.around(decision_rule, decimals=-1)
     volume_level_stored_ex = volume_level_stored[:,b_example]  
     inj = np.zeros(steps+2)
     withd = np.zeros(steps+2)
@@ -290,7 +291,7 @@ contract_value, acc_cashflows, decision_rule = facility.contract_value()
 M = 101
 nbr_simulations = 2
 alpha = 2500
-volume_end = 10000
+volume_end = 100000
 steps = 12
 
 volume_level1 = volume_level_func1(decision_rule, steps, nbr_simulations, volume_end, alpha)
