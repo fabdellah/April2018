@@ -36,15 +36,6 @@ import seaborn as sns
 
 
 
-def payoff(S,dv,injection_cost,withdrawal_cost):   
-    """specify the payoff."""
-    return -withdrawal_cost*dv*S
-
-
-def penalty(S,v):    
-    """specify the penalty function (set to zero for simplicity)."""
-    return 0
- 
     
 
  
@@ -74,7 +65,23 @@ class gas_storage(object):
 
     """
 
-    def __init__(self, simulated_price_matrix_fwd, T, steps, M, r, sigma_GBM, nbr_simulations, vMax, vMin, inj_rate, with_rate, injection_cost, withdrawal_cost, v_start):
+    
+    
+    def payoff(S,dv,injection_cost,withdrawal_cost):   
+        """specify the payoff."""
+        return -withdrawal_cost*dv*S
+    
+    
+    def penalty(S,v,v_target):    
+        """specify the penalty function (set to zero for simplicity)."""
+        if (v!=v_target):
+            penalty = -0.1
+        else:
+            penalty = 0
+        return penalty
+ 
+
+    def __init__(self, simulated_price_matrix_fwd, T, steps, M, r, sigma_GBM, nbr_simulations, vMax, vMin, inj_rate, with_rate, injection_cost, withdrawal_cost, v_start, v_end):
      
             self.simulated_price_matrix_fwd = simulated_price_matrix_fwd                                       
             self.T = T
@@ -100,7 +107,7 @@ class gas_storage(object):
             self.discount = np.exp(-self.r * self.delta_t)
               
             self.v_start = v_start
-            
+            self.v_end = v_end
             
             
     def max_inj_rates(self,vol):
@@ -135,7 +142,7 @@ class gas_storage(object):
         """ Returns a contango curve (just for testing the model) """
         simulated_price_matrix = np.zeros((self.steps + 2, self.nbr_simulations), dtype=np.float64)
         for b in range(0, self.nbr_simulations):
-            simulated_price_matrix[:,b] = np.linspace(8,1,14)
+            simulated_price_matrix[:,b] = np.linspace(1,8,14)
         return simulated_price_matrix
       
 
@@ -151,8 +158,8 @@ class gas_storage(object):
         decision_rule_avg = np.zeros((self.simulated_price_matrix().shape[0],self.M))
         volume_level_avg = np.zeros(self.simulated_price_matrix().shape[0])
         acc_cashflows_avg = np.zeros((self.simulated_price_matrix().shape[0],self.M))
-        value_matrix[-1,: ,:] = penalty(self.simulated_price_matrix()[-1, :],volume_level[-1,:]) 
-        acc_cashflows[-1,:,:] = penalty(self.simulated_price_matrix()[-1, :],volume_level[-1,:])
+        value_matrix[-1,: ,:] = self.penalty(self.simulated_price_matrix()[-1, :],  self.v_end) 
+        acc_cashflows[-1,:,:] = self.penalty(self.simulated_price_matrix()[-1, :], volume_level[-1,:], self.v_end)
                
         for t in range(self.steps , 0 , -1):
         
@@ -166,7 +173,7 @@ class gas_storage(object):
                 continuation_value = np.polyval(regression, self.simulated_price_matrix()[t, :])
                 
                 for b in range(self.nbr_simulations):
-                     f = lambda x: -1*( payoff(self.simulated_price_matrix()[t, b],
+                     f = lambda x: -1*( self.payoff(self.simulated_price_matrix()[t, b],
                                                x ,self.injection_cost,self.withdrawal_cost ) + continuation_value[b]  )
     
                      cons = ({'type': 'ineq', 'fun': lambda x:  (volume_level[t+1,b] - x - self.vMin)            },   
@@ -180,7 +187,7 @@ class gas_storage(object):
                      res = minimize(f, random.rand(1), constraints=cons)     
                      decision_rule[t,b,m-1] = res.x                  
                    
-                acc_cashflows[t,:,m-1] = payoff(self.simulated_price_matrix()[t, :],
+                acc_cashflows[t,:,m-1] = self.payoff(self.simulated_price_matrix()[t, :],
                              decision_rule[t,:,m-1] , self.injection_cost, self.withdrawal_cost) + acc_cashflows[t+1,:,m-1]*self.discount
                 
                 decision_rule_avg[t,m-1] = np.sum(decision_rule[t,:,m-1])/self.nbr_simulations
@@ -259,7 +266,7 @@ simulated_price_matrix = simulated_price_matrix.values
     
 
 
-facility =  gas_storage(simulated_price_matrix, 1, 12, 101, 0.06, 0.1, 2, 250000, 0 , 25000, -75000  ,0.1, 0.1, 0)  
+facility =  gas_storage(simulated_price_matrix, 1, 12, 101, 0.06, 0.1, 2, 250000, 0 , 25000, -75000  ,0.1, 0.1, 0, 100000)  
 contract_value, acc_cashflows, decision_rule, price = facility.contract_value() 
 
 
