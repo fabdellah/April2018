@@ -36,175 +36,6 @@ import seaborn as sns
 
 
 
-    
-
- 
-
-
-class gas_storage(object):
-    """ 
-    simulated_price_matrix_fwd : simulated gas prices from the predicted prices 
-    T : time to maturity   
-    r : riskless discount rate (constant)
-    sigma_GBM :  volatility of prices for simulating Geometric brownian motion prices
-    nbr_simulation : number of simulated paths
-    
-    vMax : maximum capacity [MWh]
-    vMin : minimum capacity [MWh]
-    max_rate : maximum injection rate [MWh/day]
-    min_rate : maximum withdrawal rate [MWh/day]
-    
-    injection_cost :cost of injection [EUR/MWh]
-    withdrawal_cost : cost of withdrawal [EUR/MWh]
-    
-    steps : number of discrete times (delta_t = T/steps)
-    M : number of units of the maximum capacity  
-    alpha : fixed width of the discretized volume
-    
-    v_start : Volume at the starting time
-
-    """
-
-    
-    
-    def payoff(S,dv,injection_cost,withdrawal_cost):   
-        """specify the payoff."""
-        return -withdrawal_cost*dv*S
-    
-    
-    def penalty(S,v,v_target):    
-        """specify the penalty function (set to zero for simplicity)."""
-        if (v!=v_target):
-            penalty = -0.1
-        else:
-            penalty = 0
-        return penalty
- 
-
-    def __init__(self, simulated_price_matrix_fwd, T, steps, M, r, sigma_GBM, nbr_simulations, vMax, vMin, inj_rate, with_rate, injection_cost, withdrawal_cost, v_start, v_end):
-     
-            self.simulated_price_matrix_fwd = simulated_price_matrix_fwd                                       
-            self.T = T
-            self.r = r
-            self.sigma_GBM = sigma_GBM
-            self.nbr_simulations = nbr_simulations       
-        
-            self.vMax = vMax                                    
-            self.vMin = vMin                               
-            self.inj_rate = inj_rate             
-            self.with_rate = with_rate             
-            
-            self.injection_cost =injection_cost                 
-            self.withdrawal_cost = withdrawal_cost
-        
-            if T <= 0 or r < 0  or sigma_GBM < 0 or nbr_simulations < 0 :
-              raise ValueError('Error: Negative inputs not allowed')
- 
-            self.steps = steps  
-            self.M = M
-            self.alpha = self.vMax/(self.M-1)
-            self.delta_t = self.T / float(self.steps)
-            self.discount = np.exp(-self.r * self.delta_t)
-              
-            self.v_start = v_start
-            self.v_end = v_end
-            
-            
-    def max_inj_rates(self,vol):
-        #return min(self.vMax - vol , self.inj_rate )
-        return self.inj_rate
-
-    def max_wit_rates(self,vol):
-        #return max(self.vMin - vol ,self.with_rate )
-        return self.with_rate
-        
-        
-    def simulated_price_matrix_GBM(self, seed = 1):
-        """ Returns Monte Carlo simulated prices (matrix) with a Geometric Brownian Motion
-            rows: time
-            columns: price-path simulation """
-    
-        np.random.seed(seed)
-        simulated_price_matrix_GBM = np.zeros((self.steps + 2, self.nbr_simulations), dtype=np.float64)
-        S0 = 3
-        simulated_price_matrix_GBM[0,:] = S0
-        for t in range(1, self.steps + 2):
-            brownian = np.random.standard_normal( int(self.nbr_simulations / 2))
-            brownian = np.concatenate((brownian, -brownian))        
-            simulated_price_matrix_GBM[t, :] = (simulated_price_matrix_GBM[t - 1, :]      
-                                  * np.exp((self.r - self.sigma_GBM ** 2 / 2.) * self.delta_t
-                                  + self.sigma_GBM * brownian * np.sqrt(self.delta_t)))
-            #needs to be specified according to the corresponding 2-factor model
-        return simulated_price_matrix_GBM           
-    
-
-    def simulated_price_matrix(self):
-        """ Returns a contango curve (just for testing the model) """
-        simulated_price_matrix = np.zeros((self.steps + 2, self.nbr_simulations), dtype=np.float64)
-        for b in range(0, self.nbr_simulations):
-            simulated_price_matrix[:,b] = np.linspace(1,8,14)
-        return simulated_price_matrix
-      
-
-    
-    def contract_value(self):
-        """Returns the value of the contract at time 0, the accumulated cashflows, the decision rule and the final price of the storage."""   
-        value_matrix = np.zeros((self.simulated_price_matrix().shape[0],self.simulated_price_matrix().shape[1],self.M))  # time, path , volume level
-        acc_cashflows = np.zeros_like(value_matrix)
-        
-        decision_rule = np.zeros_like(value_matrix)
-        volume_level = np.zeros_like(self.simulated_price_matrix())
-        
-        decision_rule_avg = np.zeros((self.simulated_price_matrix().shape[0],self.M))
-        volume_level_avg = np.zeros(self.simulated_price_matrix().shape[0])
-        acc_cashflows_avg = np.zeros((self.simulated_price_matrix().shape[0],self.M))
-        value_matrix[-1,: ,:] = self.penalty(self.simulated_price_matrix()[-1, :],  self.v_end) 
-        acc_cashflows[-1,:,:] = self.penalty(self.simulated_price_matrix()[-1, :], volume_level[-1,:], self.v_end)
-               
-        for t in range(self.steps , 0 , -1):
-        
-            print ('-----------')
-            print ('Time: %5.3f, Spot price: %5.1f ' % (t, self.simulated_price_matrix()[t, 1]))           
-            for m in range(1,self.M):    
-                
-                volume_level[t+1,:] = (m-1)*self.alpha
-
-                regression = np.polyfit(self.simulated_price_matrix()[t, :], acc_cashflows[t+1, :, m-1] * self.discount, 2)
-                continuation_value = np.polyval(regression, self.simulated_price_matrix()[t, :])
-                
-                for b in range(self.nbr_simulations):
-                     f = lambda x: -1*( self.payoff(self.simulated_price_matrix()[t, b],
-                                               x ,self.injection_cost,self.withdrawal_cost ) + continuation_value[b]  )
-    
-                     cons = ({'type': 'ineq', 'fun': lambda x:  (volume_level[t+1,b] - x - self.vMin)            },   
-                             {'type': 'ineq', 'fun': lambda x:  (self.vMax - volume_level[t+1,b] + x)            },
-                             
-                             {'type': 'ineq', 'fun': lambda x:  (self.max_inj_rates(volume_level[t+1,b]-x) - x)  },
-                             {'type': 'ineq', 'fun': lambda x:  (x - self.max_wit_rates(volume_level[t+1,b]-x))  }, 
-                                            
-                             {'type': 'ineq', 'fun': lambda x:  (self.v_start + self.max_inj_rates(volume_level[t+1,b]-x)*t - volume_level[t+1,b] + x ) })   
-        
-                     res = minimize(f, random.rand(1), constraints=cons)     
-                     decision_rule[t,b,m-1] = res.x                  
-                   
-                acc_cashflows[t,:,m-1] = self.payoff(self.simulated_price_matrix()[t, :],
-                             decision_rule[t,:,m-1] , self.injection_cost, self.withdrawal_cost) + acc_cashflows[t+1,:,m-1]*self.discount
-                
-                decision_rule_avg[t,m-1] = np.sum(decision_rule[t,:,m-1])/self.nbr_simulations
-                volume_level_avg[t] = np.sum(volume_level[t,:])/self.nbr_simulations
-                acc_cashflows_avg[t,m-1] = np.sum(acc_cashflows[t,:,m-1])/self.nbr_simulations
-          
-        contract_value = acc_cashflows[1,:,:] * self.discount             # at time 0
-        
-        price = round((np.sum(contract_value,axis=0) /  float(self.nbr_simulations))[0] , 2)
-        
-        return contract_value, acc_cashflows, decision_rule, price
-
- 
-            
-
-
-
 def volume_level_func(decision_rule, steps, nbr_simulations, volume_init, alpha,specification):
     """Returns the optimal volume stored at each time given a volume at the final time""" 
     decision_rule = np.around(decision_rule, decimals=-1)
@@ -257,6 +88,195 @@ def decision_volume(decision_rule, steps, nbr_simulations, volume_init, alpha, b
     return withd, inj
 
 
+    
+
+ 
+
+
+class gas_storage(object):
+    """ 
+    simulated_price_matrix_fwd : simulated gas prices from the predicted prices 
+    T : time to maturity   
+    r : riskless discount rate (constant)
+    sigma_GBM :  volatility of prices for simulating Geometric brownian motion prices
+    nbr_simulation : number of simulated paths
+    
+    vMax : maximum capacity [MWh]
+    vMin : minimum capacity [MWh]
+    max_rate : maximum injection rate [MWh/day]
+    min_rate : maximum withdrawal rate [MWh/day]
+    
+    injection_cost :cost of injection [EUR/MWh]
+    withdrawal_cost : cost of withdrawal [EUR/MWh]
+    
+    steps : number of discrete times (delta_t = T/steps)
+    M : number of units of the maximum capacity  
+    alpha : fixed width of the discretized volume
+    
+    v_start : Volume at the starting time
+
+    """
+
+    def payoff(self,S, dv, injection_cost, withdrawal_cost):   
+        """specify the payoff."""
+        #return S*dv*np.where(dv > 0, -injection_cost, -withdrawal_cost )     
+        return -S*dv*injection_cost   
+    
+    def penalty(self,v,v_target):    
+        """specify the penalty function."""       
+        penalty = -np.abs(v-v_target)
+        return penalty
+    
+    def penalty2(self):    
+        """specify the penalty function (set to zero for simplicity)."""
+        return 0   
+ 
+
+    def __init__(self, simulated_price_matrix_fwd, T, steps, M, r, sigma_GBM, nbr_simulations, vMax, vMin, inj_rate, with_rate, injection_cost, withdrawal_cost, v_start, v_end):
+     
+            self.simulated_price_matrix_fwd = simulated_price_matrix_fwd                                       
+            self.T = T
+            self.r = r
+            self.sigma_GBM = sigma_GBM
+            self.nbr_simulations = nbr_simulations       
+        
+            self.vMax = vMax                                    
+            self.vMin = vMin                               
+            self.inj_rate = inj_rate             
+            self.with_rate = with_rate             
+            
+            self.injection_cost =injection_cost                 
+            self.withdrawal_cost = withdrawal_cost
+        
+            if T <= 0 or r < 0  or sigma_GBM < 0 or nbr_simulations < 0 :
+              raise ValueError('Error: Negative inputs not allowed')
+ 
+            self.steps = steps  
+            self.M = M
+            self.alpha = self.vMax/(self.M-1)
+            self.delta_t = self.T / float(self.steps)
+            self.discount = np.exp(-self.r * self.delta_t)
+              
+            self.v_start = v_start
+            self.v_end = v_end
+            
+     
+        
+    def volume_limit_up(self):
+        limit_up = np.zeros(self.steps+1)
+        for t in range(self.steps+1):
+            limit_up[t] = np.minimum(self.v_start + t*self.alpha , self.v_end + (self.steps-t)*self.alpha)
+        return limit_up
+    
+
+    def volume_limit_down(self):
+        limit_down = np.zeros(self.steps+1)
+        for t in range(self.steps+1):
+            limit_down[t] = np.maximum(self.v_start - t*self.alpha , self.v_end - (self.steps-t)*self.alpha)
+        return limit_down
+    
+    
+    def max_inj_rates(self,vol=1):
+        #return min(self.vMax - vol , self.inj_rate )
+        return self.inj_rate
+
+    def max_wit_rates(self,vol=1):
+        #return max(self.vMin - vol ,self.with_rate )
+        return self.with_rate
+        
+        
+    def simulated_price_matrix_GBM(self, seed = 1):
+        """ Returns Monte Carlo simulated prices (matrix) with a Geometric Brownian Motion
+            rows: time
+            columns: price-path simulation """
+    
+        np.random.seed(seed)
+        simulated_price_matrix_GBM = np.zeros((self.steps + 2, self.nbr_simulations), dtype=np.float64)
+        S0 = 3
+        simulated_price_matrix_GBM[0,:] = S0
+        for t in range(1, self.steps + 2):
+            brownian = np.random.standard_normal( int(self.nbr_simulations / 2))
+            brownian = np.concatenate((brownian, -brownian))        
+            simulated_price_matrix_GBM[t, :] = (simulated_price_matrix_GBM[t - 1, :]      
+                                  * np.exp((self.r - self.sigma_GBM ** 2 / 2.) * self.delta_t
+                                  + self.sigma_GBM * brownian * np.sqrt(self.delta_t)))
+            #needs to be specified according to the corresponding 2-factor model
+        return simulated_price_matrix_GBM           
+    
+
+    def simulated_price_matrix(self):
+        """ Returns a contango curve (just for testing the model) """
+        simulated_price_matrix = np.zeros((self.steps + 2, self.nbr_simulations), dtype=np.float64)
+        for b in range(0, self.nbr_simulations):
+            simulated_price_matrix[:,b] = np.linspace(1, 8, self.steps + 2)
+        return simulated_price_matrix
+      
+        
+    
+    def f(self,x,t,b):
+                return ( self.payoff(self.simulated_price_matrix()[t, b], x ,self.injection_cost,self.withdrawal_cost ) + self.continuation_value[b]  )
+    
+    
+    
+    
+    def contract_value(self):
+        """Returns the value of the contract at time 0, the accumulated cashflows, the decision rule and the final price of the storage."""   
+        
+        acc_cashflows = np.zeros((self.steps+1, self.nbr_simulations, self.M))  # time, path , volume level
+        
+        decision_rule = np.empty((self.steps+1, self.nbr_simulations, self.M))  # time, path , volume level
+        decision_rule[:] = np.nan
+        
+        volume_level = np.zeros((self.steps+1, self.nbr_simulations))
+        volume_level[self.steps,:] = self.v_end*np.ones(self.nbr_simulations)
+        volume_level[0,:] = self.v_start*np.ones(self.nbr_simulations)
+        
+      
+        volume_limit_down = self.volume_limit_down()      
+        volume_limit_up = self.volume_limit_up()     
+        
+        levels_volume = np.linspace(0,self.alpha*100,101)
+        acc_cashflows[-1,:, :] = self.penalty(levels_volume, self.v_end)
+        
+        for t in range(self.steps-1 , 0 , -1):
+        
+            print ('-----------')
+            print ('Time: %5.3f, Spot price: %5.1f ' % (t, self.simulated_price_matrix()[t, 1]))           
+            for m in range(1,self.M):          
+                #if m in range( int(volume_limit_down[t] /self.alpha +1 ), int(volume_limit_up[t] /self.alpha +1 )+1  ):
+                
+                    volume_level[t+1,:] = (m-1)*self.alpha                  
+                                   
+                    regression = np.polyfit(self.simulated_price_matrix()[t, :], acc_cashflows[t+1, :, m-1] * self.discount, 2)
+                    self.continuation_value = np.polyval(regression, self.simulated_price_matrix()[t, :])
+                    
+                    for b in range(self.nbr_simulations):
+                                              
+                         possible_values=[-self.alpha,0,self.alpha]
+                         out= np.array([self.f(x,t,b) for x in possible_values])
+                         
+                         arg_maximum= np.argmax(out)
+                         
+                         dv_opt= possible_values[arg_maximum]
+                                                  
+                         decision_rule[t,b,m-1] = dv_opt  
+                         
+                         volume_level[t,b] = volume_level[t+1,b] - decision_rule[t,b,m-1]
+                        
+
+                    
+                    acc_cashflows[t,:,m-1] = self.payoff(self.simulated_price_matrix()[t, :],
+                                     decision_rule[t,:,m-1] , self.injection_cost, self.withdrawal_cost) + acc_cashflows[t+1,:,m-1]*self.discount
+                        
+            
+        contract_value = acc_cashflows[1,:,:] * self.discount             # at time 0
+        
+        price = round((np.sum(contract_value,axis=0) /  float(self.nbr_simulations))[0] , 2)
+        
+        return contract_value, acc_cashflows, decision_rule, price, volume_level, volume_limit_down, volume_limit_up
+
+
+
 
 
 
@@ -266,16 +286,16 @@ simulated_price_matrix = simulated_price_matrix.values
     
 
 
-facility =  gas_storage(simulated_price_matrix, 1, 12, 101, 0.06, 0.1, 2, 250000, 0 , 25000, -75000  ,0.1, 0.1, 0, 100000)  
-contract_value, acc_cashflows, decision_rule, price = facility.contract_value() 
+facility =  gas_storage(simulated_price_matrix, 1, 3, 101, 0.035, 0.1, 2, 250000, 0 , 25000, -25000  ,0.1, 0.1, 100000, 100000)  
+contract_value, acc_cashflows, decision_rule, price , volume_level, volume_limit_down, volume_limit_up = facility.contract_value() 
 
 
 
 M = 101
 nbr_simulations = 2
 alpha = 2500
-volume_end = 0
-volume_start = 100000
+volume_end = 100000
+volume_start = 10000
 steps = 12
 
 volume_level = volume_level_func(decision_rule, steps, nbr_simulations, volume_end, alpha, 'end')
