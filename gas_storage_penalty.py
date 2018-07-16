@@ -35,56 +35,37 @@ import seaborn as sns
 
 
 
-def volume_level_func(decision_rule, steps, nbr_simulations, volume_init, alpha,specification):
-    """Returns the optimal volume stored at each time given a volume at the final time""" 
-    decision_rule = np.around(decision_rule, decimals=-1)
-    volume_level_stored = np.zeros((steps+2, nbr_simulations))
-    
-    for b in range(nbr_simulations):  
-        if (specification=='end'):     
-            volume_level_stored[steps+1,:] = volume_init
-            for t  in range(steps,0,-1):     
-                m_level = ( (volume_level_stored[t+1,b])/alpha).astype(int) + 1     
-                if (np.abs(decision_rule[t,b,m_level]) >= alpha):                   
-                       volume_level_stored[t,b] = volume_level_stored[t+1,b] - decision_rule[t,b,m_level]
-                else:
-                       volume_level_stored[t,b] = volume_level_stored[t+1,b]
-        elif (specification=='start'):
-            volume_level_stored[0,:] = volume_init
-            for t  in range(steps):   
-                m_level = ( (volume_level_stored[t,b])/alpha).astype(int) + 1
-                if (np.abs(decision_rule[t,b,m_level]) >= alpha):                   
-                       volume_level_stored[t+1,b] = volume_level_stored[t,b] + decision_rule[t,b,m_level]
-                else:
-                       volume_level_stored[t+1,b] = volume_level_stored[t,b]
-               
-    return volume_level_stored
+def volume_level_func(decision_rule, steps, nbr_simulations, volume_start, alpha):
+    """Returns the optimal volume stored at each time given a volume at the starting time"""
+    volume_level_stored = np.zeros((steps+1, nbr_simulations))  
+    volume_level_stored[0,:] = volume_start
+    for b in range(nbr_simulations):   
+        for t  in range(steps): 
+            m_level = ( (volume_level_stored[t,b])/alpha).astype(int) 
+            volume_level_stored[t+1,b] = volume_level_stored[t,b] + decision_rule[t,b,m_level]
+    volume_level_avg =    np.zeros(steps+1)     
+    volume_level_avg = (np.sum(volume_level_stored,axis =1)/nbr_simulations).astype(int)
+    return volume_level_stored, volume_level_avg
 
 
-def decision_volume(decision_rule, steps, nbr_simulations, volume_init, alpha, b_example, specification):
+def decision_volume(decision_rule, steps, nbr_simulations, volume_start, alpha):
     """Returns the optimal behaviour (inject or withdraw) at each time given a volume at the final time"""
-    inj = np.zeros(steps+2)
-    withd = np.zeros(steps+2)
-    decision_rule = np.around(decision_rule, decimals=-1)
-    volume_level_stored = volume_level_func(decision_rule, steps, nbr_simulations, volume_init, alpha, specification) 
-    volume_level_stored_ex =volume_level_stored[:,b_example]  
-    if (specification=='end'): 
-        for t  in range(steps,0,-1):                
-                m_level = ( (volume_level_stored_ex[t+1])/alpha).astype(int) + 1    
-                print('At time ', t , ', inject/withdraw: ',decision_rule[t,b_example,m_level] )           
-                if decision_rule[t,b_example,m_level]>0 :
-                    inj[t] = decision_rule[t,b_example,m_level]
-                else:
-                    withd[t] = np.abs(decision_rule[t, b_example, m_level])
-    elif (specification=='start'):
-         for t  in range(steps):                
-                m_level = ( (volume_level_stored_ex[t])/alpha).astype(int) + 1    
-                print('At time ', t , ', inject/withdraw: ',decision_rule[t,b_example,m_level] )           
-                if decision_rule[t,b_example,m_level]>0 :
-                    inj[t] = decision_rule[t,b_example,m_level]
-                else:
-                    withd[t] = np.abs(decision_rule[t, b_example, m_level])
-    return withd, inj
+    inj = np.zeros((steps+1, nbr_simulations))  
+    withd = np.zeros((steps+1, nbr_simulations))  
+    volume_level_stored, volume_level_avg = volume_level_func(decision_rule, steps, nbr_simulations, volume_start, alpha) 
+    
+    for b in range(nbr_simulations):   
+        for t in range(steps):               
+            m_level = ( (volume_level_stored[t,b])/alpha).astype(int)     
+            if decision_rule[t,b,m_level]>0 :
+                inj[t,b] = decision_rule[t,b,m_level]
+            else:
+                withd[t,b] = np.abs(decision_rule[t, b, m_level])
+    inj_avg = np.zeros(steps+1)     
+    inj_avg = (np.sum(inj,axis =1)/nbr_simulations).astype(int)
+    withd_avg = np.zeros(steps+1)     
+    withd_avg = (np.sum(withd,axis =1)/nbr_simulations).astype(int)
+    return withd_avg, inj_avg
 
 
     
@@ -112,7 +93,6 @@ class gas_storage(object):
     M : number of units of the maximum capacity  
     alpha : fixed width of the discretized volume
     
-    v_start : Volume at the starting time
     """
 
     def payoff(self,S, dv, injection_cost, withdrawal_cost):   
@@ -126,7 +106,7 @@ class gas_storage(object):
         return penalty
     
 
-    def __init__(self, simulated_price_matrix_fwd, T, steps, M, r, sigma_GBM, nbr_simulations, vMax, vMin, inj_rate, with_rate, injection_cost, withdrawal_cost, v_start, v_end):
+    def __init__(self, simulated_price_matrix_fwd, T, steps, M, r, sigma_GBM, nbr_simulations, vMax, vMin, inj_rate, with_rate, injection_cost, withdrawal_cost, v_end):
      
             self.simulated_price_matrix_fwd = simulated_price_matrix_fwd                                       
             self.T = T
@@ -151,7 +131,6 @@ class gas_storage(object):
             self.delta_t = self.T / float(self.steps)
             self.discount = np.exp(-self.r * self.delta_t)
               
-            self.v_start = v_start
             self.v_end = v_end
             
      
@@ -202,19 +181,16 @@ class gas_storage(object):
         """ Returns a contango curve (just for testing the model) """
         simulated_price_matrix = np.zeros((self.steps + 2, self.nbr_simulations), dtype=np.float64)
         for b in range(0, self.nbr_simulations):
-#            simulated_price_matrix[:,b] = np.linspace(1, 14, self.steps + 2) 
-            simulated_price_matrix[:,b] = np.array([7,6,5,4,3,2,1,1,2,3,4,5,6,7])
+#            simulated_price_matrix[:,b] = np.linspace(1, 14, self.steps + 2)      #contango
+            simulated_price_matrix[:,b] = np.linspace(14, 1, self.steps + 2)      #backwardation
+#            simulated_price_matrix[:,b] = np.array([7,6,5,4,3,2,1,2,3,4,5,6,7,8])
 
         return simulated_price_matrix
       
         
     
     def f(self,x,t,b,m):
-        if m == 10:
-            if t == 1:
-                print('payoff ', self.payoff(self.simulated_price_matrix_fwd[t, b], x ,self.injection_cost,self.withdrawal_cost ), '/ continuation_value : ' , self.continuation_value[t,b, (m-1) + int(x/self.alpha) ])
-#           print('simulated_price[t, b] : ', self.simulated_price_matrix()[t, b])
-        return ( self.payoff(self.simulated_price_matrix_fwd[t, b], x ,self.injection_cost,self.withdrawal_cost ) + self.continuation_value[t,b, (m-1) + int(x/self.alpha) ]  )
+        return ( self.payoff(self.simulated_price_matrix()[t, b], x ,self.injection_cost,self.withdrawal_cost ) + self.continuation_value[t,b, (m-1) + int(x/self.alpha) ]  )
   
     
     
@@ -235,16 +211,17 @@ class gas_storage(object):
         for t in range(self.steps-1 , -1  , -1):
         
             print ('-----------')
-            print ('Time: %5.3f, Spot price: %5.1f ' % (t, self.simulated_price_matrix_fwd[t, 1]))           
+            print ('Time: %5.3f, Spot price: %5.1f ' % (t, self.simulated_price_matrix()[t, 1]))           
             for m in range(1,self.M):                      
                                    
-                    regression = np.polyfit(self.simulated_price_matrix_fwd[t, :], acc_cashflows[t+1, :, m-1] * self.discount, 2)
-                    self.continuation_value[t,:,m-1] = np.polyval(regression, self.simulated_price_matrix_fwd[t, :])
+                    regression = np.polyfit(self.simulated_price_matrix()[t, :], acc_cashflows[t+1, :, m-1] * self.discount, 2)
+                    self.continuation_value[t,:,m-1] = np.polyval(regression, self.simulated_price_matrix()[t, :])
             
             for b in range(self.nbr_simulations):
                 for m in range(1,self.M): 
                                       
                      possible_values=[-self.alpha,0,self.alpha]
+                     #possible_values=[0,self.alpha]
                      out= np.array([self.f(x,t,b,m) for x in possible_values])
                      
                      arg_maximum= np.argmax(out)
@@ -253,8 +230,7 @@ class gas_storage(object):
                                               
                      decision_rule[t,b,m-1] = dv_opt  
                                          
-                     print('t: ',t, ' b: ',b ,' m: ',m, 'decision_rule[t,b,m-1]: ', decision_rule[t,b,m-1])
-                     acc_cashflows[t,b,m-1] = self.payoff(self.simulated_price_matrix_fwd[t, b],
+                     acc_cashflows[t,b,m-1] = self.payoff(self.simulated_price_matrix()[t, b],
                                      decision_rule[t,b,m-1] , self.injection_cost, self.withdrawal_cost) + acc_cashflows[t+1 , b,  (m-1) + int((decision_rule[t,b , m-1])/self.alpha)  ]*self.discount
                         
                   
@@ -275,20 +251,19 @@ simulated_price_matrix = simulated_price_matrix.values
     
 
 
-facility =  gas_storage(simulated_price_matrix, 1, 12, 101, 0.035, 0.1, 50, 250000, 0 , 25000, -25000  , 0.1, 0.1 , 100000, 100000)  
+facility =  gas_storage(simulated_price_matrix, 1, 12, 101, 0.035, 0.1, 2, 250000, 0 , 25000, -25000  , 0.1, 0.1 , 100000)  
 contract_value, acc_cashflows, decision_rule, price = facility.contract_value() 
 
 
 
 M = 101
-nbr_simulations = 25
+nbr_simulations = 2
 alpha = 2500
-volume_end = 100000
-volume_start = 10000
+volume_start = 100000
 steps = 12
 
-volume_level = volume_level_func(decision_rule, steps, nbr_simulations, volume_end, alpha, 'end')
-withd, inj = decision_volume(decision_rule, steps, nbr_simulations, volume_end, alpha, 0, 'end')
+volume_level,  volume_level_avg = volume_level_func(decision_rule, steps, nbr_simulations, volume_start, alpha)
+withd, inj = decision_volume(decision_rule, steps, nbr_simulations, volume_start, alpha)
 
 
 
@@ -296,22 +271,25 @@ withd, inj = decision_volume(decision_rule, steps, nbr_simulations, volume_end, 
 
 time = np.arange(0,14)  
 plt.plot(time, facility.simulated_price_matrix()  ) 
-plt.title('Contango')
+plt.title('Forward curve')
 plt.xlabel('Time (month)')
 plt.ylabel('Price [EUR/MWh]')
 plt.show()
 
 
 # Plot the optimal volume stored (example)
-time = np.arange(0,14)
+ymini = 80000
+ymaxi = 120000
+time = np.arange(0,13)
 plt.rcParams['figure.figsize']=(10,5)
 plt.style.use('ggplot') 
 pal = ["#9b59b6", "#e74c3c", "#34495e", "#2ecc71"]
-plt.bar(time, withd, label = 'Withdrawal' )
-plt.bar(time, inj , label = 'injection' )
-plt.stackplot(time,volume_level[:,0], colors=pal, alpha=0.4, labels = 'Volume stored')
+plt.bar(time, withd+ymini, label = 'Withdrawal' )
+plt.bar(time, inj+ymini , label = 'injection' )
+plt.stackplot(time,volume_level_avg, colors=pal, alpha=0.4, labels = 'Volume stored')
+plt.ylim(ymin = ymini, ymax = ymaxi) 
 plt.legend(loc='upper right')
-plt.title('Volume of natural gas stored')
+plt.title('Volume of natural gas imported')
 plt.xlabel('Time (months)')
 plt.ylabel('Volume [MWh]')
 plt.show()
@@ -319,9 +297,8 @@ plt.show()
 
 
 time = np.arange(0,14)  
-plt.plot(time, facility.simulated_price_matrix_fwd[:,:])   
+plt.plot(time, facility.simulated_price_matrix_fwd)   
 plt.title('Simulated prices')
 plt.xlabel('Time (month)')
 plt.ylabel('Price [EUR/MWh]')
 plt.show()
-
