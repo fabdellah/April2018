@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon May  7 09:31:08 2018
+Created on Mon May 14 09:18:18 2018
 
 @author: fabdellah
 """
+
+
 
 
 import matplotlib.pyplot as plt
@@ -30,7 +32,6 @@ from sklearn import datasets, linear_model
 from sklearn.linear_model import LinearRegression
 import statsmodels.api as sm
 from scipy import stats
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error 
 
 
 # Import data
@@ -60,13 +61,33 @@ y = russia_Index_x['index']
 
 
 
+
+
+start_date_str = '2009-12-31 00:00:00'                                                       # Select dates for commodities prices
+end_date_str = '2015-12-31 00:00:00'
+
+start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
+end_date = datetime.strptime(end_date_str,"%Y-%m-%d %H:%M:%S") 
 df = pd.read_excel('spot_prices.xls')
 df_oil = df[['date_oil', 'oil']]
 df_oil.columns = ['date', 'oil']
+df_oil['date'] = pd.to_datetime(df_oil['date'])  
+mask = (df_oil['date'] >= start_date) & (df_oil['date'] <= end_date)
+df_oil_x = df_oil.loc[mask].reset_index()  
+df_oil_x.drop('index', axis=1, inplace=True) 
+df_oil_x = df_oil_x.set_index('date')
+df_oil_monthly = df_oil_x.resample("M", how='mean').reset_index().iloc[1:13,:]    
 
 
 df_gas = df[['date_gas', 'gas']]
 df_gas.columns = ['date', 'gas']
+df_gas['date'] = pd.to_datetime(df_gas['date'])  
+mask = (df_gas['date'] >= start_date) & (df_gas['date'] <= end_date)
+df_gas_x = df_gas.loc[mask].reset_index()  
+df_gas_x.drop('index', axis=1, inplace=True) 
+df_gas_x = df_gas_x.set_index('date')
+df_gas_monthly = df_gas_x.resample("M", how='mean').reset_index().iloc[1:13,:]   
+
 
 
 
@@ -129,12 +150,9 @@ def gradient_descent(y, tx, initial_w, max_iters, gamma):
 
 def score(X_train,y_train, X_test, y_test,coef):
     y_pred_train = np.dot(X_train,coef)     
-    y_pred_test = np.dot(X_test,coef)
-    r2_test = r2_score(y_test, y_pred_test)  
+    r2 = r2_score(y_test, np.dot(X_test,coef))  
     r2_train = r2_score(y_train, y_pred_train)
-    return r2_test, r2_train
-
-
+    return r2,r2_train
 
 
 def ridge_regression(X_train,y_train, X_test, y_test):    
@@ -142,17 +160,15 @@ def ridge_regression(X_train,y_train, X_test, y_test):
     # select the best alpha with RidgeCV (cross-validation)
     # alpha=0 is equivalent to linear regression
     alpha_range = 10.**np.arange(-2, 3)
-    ridgeregcv = RidgeCV(alphas=alpha_range, fit_intercept=True, normalize=False, scoring='mean_squared_error') 
+    ridgeregcv = RidgeCV(alphas=alpha_range, normalize=False, scoring='mean_squared_error') 
     ridgeregcv.fit(X_train, y_train)
-    #print('best alpha=',ridgeregcv.alpha_)
-    #print('ridgeregcv.coef: ',ridgeregcv.coef_)
-    # predict method uses the best alpha value
+    
     y_pred = ridgeregcv.predict(X_test)
     err = metrics.mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)  
     r2_train = r2_score(y_train, ridgeregcv.predict(X_train))
     score = ridgeregcv.score
-    return ridgeregcv.coef_ , ridgeregcv.intercept_ , err, r2, r2_train, score
+    return ridgeregcv.coef_ , err, r2, r2_train, score
  
 
 def linear_regression(X_train,y_train, X_test, y_test):
@@ -170,7 +186,7 @@ def linear_regression(X_train,y_train, X_test, y_test):
 
 
 
-def MA_func_vect_out(nbr_months_per_data, df1, start_date_str,end_date_str, lag, ma_period,reset_period,vect): #vect=np.empty(0) 
+def MA_func_vect_out(nbr_months_per_data, df1, start_date_str,end_date_str, lag, ma_period,reset_period,vect): #vect=np.empty(0) # pour reset_period=1 len(ma_vect)=11 au lieu de 12 je c pas pk
     start_date = datetime.strptime(start_date_str,"%Y-%m-%d %H:%M:%S") 
     end_date = datetime.strptime(end_date_str,"%Y-%m-%d %H:%M:%S") 
     start_date_x = start_date - relativedelta(months=int(round(lag))) - relativedelta(months=int(round(ma_period) ))            
@@ -201,11 +217,10 @@ def MA_plot(df1, start_date_str,end_date_str, lag, ma_period,reset_period):
     plt.show()
 
 
-    
-def polynomial(X):    
-    poly = PolynomialFeatures(degree=2, interaction_only=True)
-    return poly.fit_transform(X)       
  
+def polynomial(X):    
+    poly = PolynomialFeatures(degree=2) 
+    return poly.fit_transform(X)       
 
 
 
@@ -215,35 +230,7 @@ def OLS_stat(X,y):
     est2 = est.fit()
     print(est2.summary())
  
-
-
-def plot_predictions(russia_Index_x, russia_Index_test, y, y_test, y_pred_test ,y_train_model):
-    plt.rcParams['figure.figsize']=(10,5)
-    plt.style.use('ggplot') 
-    d1 = {'date' : russia_Index_x['date'],  'y_train' : y.astype(float)}
-    df_y_train = pd.DataFrame(d1) 
-    d2 = {'date' : russia_Index_test['date'],  'y_test' :y_test}
-    df_y_test = pd.DataFrame(d2) 
-    d3 = {'date' : russia_Index_test['date'],  'y_pred' : y_pred_test}
-    df_y_pred = pd.DataFrame(d3) 
-    d4 = {'date' : russia_Index_x['date'],  'y_train_model' : y_train_model}
-    df_y_train_model = pd.DataFrame(d4) 
-    other = df_y_test.set_index('date').join(df_y_pred.set_index('date'))
-    other = other.reset_index()
-    y_curve1 = df_y_train.append(other)
-    y_curve = df_y_train_model.append(y_curve1)
-    
-    fig, ax1 = plt.subplots()
-    ax1.plot(y_curve.date , y_curve.y_train , color='red', label = 'Actual prices')
-    ax1.plot(y_curve.date , y_curve.y_test , color='orange' , label = 'Actual prices')
-    ax1.plot(y_curve.date , y_curve.y_pred , color='black', linestyle=':', label = 'Forecast prices')
-    ax1.plot(y_curve.date , y_curve.y_train_model , color='blue', linestyle='--', label = 'Model')
-    plt.title('Russian gas prices: Actual vs forecast')
-    ax1.set_ylabel('USD')
-    ax1.set_xlabel('Date')
-    plt.legend()
  
-
 
 class class_alternate(object):
     
@@ -318,8 +305,9 @@ class class_alternate(object):
         
         lag_oil,  lag_gas, period_oil, period_gas, reset_oil,  reset_gas = parameters
         df_oil , df_gas , coef, values = data
-        values = compute_mse( self.y ,np.c_[np.ones(self.nbr_months_per_data),  preprocessing.scale(self.MA_func_vect(lag_oil, lag_gas, period_oil, period_gas, reset_oil,  reset_gas, np.empty(0))) ], coef) 
+        values = compute_mse( preprocessing.scale(self.y) ,  np.c_[np.ones(self.nbr_months_per_data), preprocessing.scale(polynomial(self.MA_func_vect(lag_oil, lag_gas, period_oil, period_gas, reset_oil,  reset_gas, np.empty(0))))[:,1:6].reshape(self.nbr_months_per_data,5)]  , coef) 
         return values
+
 
 
     def de_optimization(self, coef):
@@ -352,28 +340,27 @@ class class_alternate(object):
             #process2: opt coeff given lag and period 
             t02 = time()
             X_df = self.MA_func_vect(lag_oil, lag_gas, ma_period_oil, ma_period_gas,reset_period_oil, reset_period_gas ,np.empty(0))     
-            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale(X_df).reshape(self.nbr_months_per_data,2)] 
+            XX_stand = np.c_[np.ones(X_df.shape[0]), preprocessing.scale((polynomial(X_df))[:,1:6]).reshape(self.nbr_months_per_data,5)] 
             w_initial = gradient_w
-            gradient_loss, gradient_w = gradient_descent(self.y, XX_stand, w_initial, max_iters, gamma)            
-            X_train, X_test, y_train, y_test = train_test_split(XX_stand, self.y, random_state=1)
+            gradient_loss, gradient_w = gradient_descent(preprocessing.scale(self.y), XX_stand, w_initial, max_iters, gamma)            
+            X_train, X_test, y_train, y_test = train_test_split(XX_stand, preprocessing.scale(self.y), random_state=1)
             
             res_ridge = ridge_regression(X_train, y_train, X_test, y_test)
              
             # update coef
-            coef = np.concatenate([[res_ridge[1]],res_ridge[0][1:3]])
+            coef = res_ridge[0]
             y_pred_GD = np.dot(X_test,gradient_w)
             print('Coef GD:', gradient_w )
             print('Error GD:', metrics.mean_squared_error(y_test, y_pred_GD))
             print('R2_test GD', r2_score(y_test, y_pred_GD)  )
-            print('R2_all_matrix GD', r2_score(self.y, np.dot(XX_stand,gradient_w))  )
+            print('R2_all_matrix GD', r2_score(preprocessing.scale(self.y), np.dot(XX_stand,gradient_w))  )
                         
             print('---------')            
             
-            print('Coef RR:', coef )
-            print('Error RR: ', res_ridge[2])
-            print('R2_train RR: ', res_ridge[4])
-            print('R2 RR: ', res_ridge[3])
-            
+            print('Coef RR:', res_ridge[0] )
+            print('Error RR: ', res_ridge[1])
+            print('R2 RR: ', res_ridge[2])
+            print('R2_train RR: ', res_ridge[3])
             t12 = time()
             d2 = t12-t02
             print ("Duration of process 2 in Seconds %6.3f" % d2)        
@@ -391,7 +378,7 @@ if __name__ == '__main__':
     #Step 1: optimizing lag, ma_period, reset_period and get the coefficients     
     
                                    #df_oil,  df_gas, y, start_date_str,end_date_str, nbr_months_per_data, nbr_iterations, max_lag, max_ma_period, max_reset_period ,init_coef
-    optimization = class_alternate(df_oil ,df_gas,y.astype(float) ,'2010-01-31 00:00:00','2016-01-31 00:00:00', 72,26, 9 , 9, 6, np.array([0,0,0]))
+    optimization = class_alternate(df_oil ,df_gas,y ,'2014-01-31 00:00:00','2016-01-31 00:00:00', 24, 5, 12 , 12, 7, np.array([0,0,0,0,0,0]))
     t0 = time()
     coef , lag , ma_period, reset_period , X_df, XX_stand, X_train, X_test, y_train, y_test = optimization.alternate()    
     t1 = time()
@@ -399,113 +386,45 @@ if __name__ == '__main__':
     print ("Total duration in Seconds %6.3f" % d)               
     print('final coef: ', coef)
       
-    #coef_reg = sm.OLS(y.astype(float), XX_stand).fit().params
-    y_train_model = np.dot(XX_stand , coef) 
     
-    OLS_stat(XX_stand , y.astype(float))
+    OLS_stat(XX_stand,preprocessing.scale(y))
     
-    mean_oil = X_df.mean(axis=0)[0]
-    mean_gas = X_df.mean(axis=0)[1]
-    std_oil = X_df.std(axis=0)[0]
-    std_gas = X_df.std(axis=0)[1]
+    
     
     # Testing 
     
-    nbr_months_per_testing_data = 13   
-    
-    start_date_index = '2015-12-01 00:00:00'                                                                   # Select dates for Russia's index
-    end_date_index = '2016-12-01 00:00:00' 
-    start_date_index = datetime.strptime(start_date_index,"%Y-%m-%d %H:%M:%S") 
-    end_date_index = datetime.strptime(end_date_index,"%Y-%m-%d %H:%M:%S") 
-    mask = (russia_Index['date'] >= start_date_index) & (russia_Index['date'] <= end_date_index)
-    russia_Index_test = russia_Index.loc[mask].reset_index()  
-    russia_Index_test.drop('level_0', axis=1, inplace=True) 
-    y_test = russia_Index_test['index']
+    nbr_months_per_data = 12  
+    start_date_index = '2016M1'                                                                
+    end_date_index = '2017M1'
+    start_indices = list(np.where(russia_Index["date"] == start_date_index)[0])[0]
+    end_indices = list(np.where(russia_Index["date"] == end_date_index)[0])[0]
+    yy_test = russia_Index.iloc[start_indices:end_indices ]
+    y_test = yy_test['index']
     
     
-    start_day = '2015-12-31 00:00:00'
+    start_day = '2016-01-31 00:00:00'
     end_day = '2017-01-31 00:00:00'
-    oil_test = MA_func_vect_out(nbr_months_per_testing_data, df_oil, start_day , end_day , lag[0,0] , ma_period[0,0] , reset_period[0,0] , np.empty(0))
-    gas_test = MA_func_vect_out(nbr_months_per_testing_data, df_gas, start_day , end_day , lag[0,1],ma_period[0,1], reset_period[0,1] , np.empty(0))
+    oil_test = MA_func_vect_out(nbr_months_per_data, df_oil, start_day , end_day , lag[0,0] , ma_period[0,0] , reset_period[0,0] , np.empty(0))
+    gas_test = MA_func_vect_out(nbr_months_per_data, df_gas, start_day , end_day , lag[0,1],ma_period[0,1], reset_period[0,1] , np.empty(0))
     
-    X_test = np.c_[(oil_test-mean_oil)/std_oil,  (gas_test-mean_gas)/std_gas]
-    X_test_stand = np.c_[np.ones(X_test.shape[0]), X_test.reshape(nbr_months_per_testing_data,2)]   
+    X_test = np.c_[oil_test,  gas_test]
+    X_test_stand = np.c_[np.ones(X_test.shape[0]), preprocessing.scale((polynomial(X_test))[:,1:6]).reshape(nbr_months_per_data,5)]  
     
-    OLS_stat(X_test_stand , y_test.astype(float)  )
-
-    y_pred_test = np.dot(X_test_stand,coef)    
-   
-
-    pd.DataFrame(y_pred_test).to_excel('y_pred_test.xlsx', sheet_name='y_pred_test', index=False)
+    OLS_stat(X_test_stand ,preprocessing.scale(y_test))
     
+    error_test = compute_mse(preprocessing.scale(y_test), X_test_stand, coef)
     
-    plot_predictions(russia_Index_x, russia_Index_test, y, y_test, y_pred_test ,y_train_model) 
-    
-    score(XX_stand , y.astype(float), X_test_stand, y_test.astype(float),coef )
-    error_test = compute_mse(y_test.astype(float), X_test_stand, coef)  
-    mae = mean_absolute_error(y_pred_test, y_test)   
-
-    
- 
-    ############### a supprimer: lag 3m, ma_period 6m
-    
-
-    
-    start_day = '2010-01-31 00:00:00'
-    end_day = '2016-01-31 00:00:00'
-    nbr_months_per_training_data = 72
-
-    oil_train = MA_func_vect_out(nbr_months_per_training_data, df_oil, start_day , end_day , 7 , 1 , 3 , np.empty(0))
-    gas_train = MA_func_vect_out(nbr_months_per_training_data, df_gas, start_day , end_day , 5, 7, 5 , np.empty(0))
-    
-    mean_oil = oil_train.mean()
-    mean_gas = gas_train.mean()
-    std_oil = oil_train.std()
-    std_gas = gas_train.std()
-    
-    X_train = np.c_[oil_train,  gas_train]
-    X_train_stand = np.c_[np.ones(X_train.shape[0]), preprocessing.scale(X_train).reshape(nbr_months_per_training_data,2)]   
+    score(XX_stand,preprocessing.scale(y), X_test_stand, preprocessing.scale(y_test),coef )
     
     
-    OLS_stat(X_train_stand, y.astype(float))
-       
-   # coef = sm.OLS(y.astype(float), X_train_stand).fit().params
-    coef = np.array([9.9595,1.9715,-0.3532])
-    y_train_model = np.dot(X_train_stand , coef) 
-
-
-    nbr_months_per_testing_data = 13      
-    start_date_index = '2015-12-01 00:00:00'                                                                   # Select dates for Russia's index
-    end_date_index = '2016-12-01 00:00:00' 
-    start_date_index = datetime.strptime(start_date_index,"%Y-%m-%d %H:%M:%S") 
-    end_date_index = datetime.strptime(end_date_index,"%Y-%m-%d %H:%M:%S") 
-    mask = (russia_Index['date'] >= start_date_index) & (russia_Index['date'] <= end_date_index)
-    russia_Index_test = russia_Index.loc[mask].reset_index()  
-    russia_Index_test.drop('level_0', axis=1, inplace=True) 
-    y_test = russia_Index_test['index']
-
-    start_day = '2015-12-31 00:00:00'
-    end_day = '2017-01-31 00:00:00'
-
-    oil_test = MA_func_vect_out(nbr_months_per_testing_data, df_oil, start_day , end_day , 7 , 1 , 3   , np.empty(0))
-    gas_test = MA_func_vect_out(nbr_months_per_testing_data, df_gas, start_day , end_day , 5, 7, 5, np.empty(0))    
-    X_test = np.c_[(oil_test-mean_oil)/std_oil,  (gas_test-mean_gas)/std_gas]
-    X_test_stand = np.c_[np.ones(X_test.shape[0]), X_test.reshape(nbr_months_per_testing_data,2)]   
-   
-
-
-    OLS_stat(X_test_stand , y_test.astype(float) )
-
-    score(X_train_stand, y, X_test_stand,  y_test.astype(float) ,coef )
-
-    
-    y_pred_test = np.dot(X_test_stand,coef)    
-    plot_predictions(russia_Index_x, russia_Index_test, y, y_test, y_pred_test,y_train_model)
     
     
-    score(X_train_stand , y.astype(float), X_test_stand, y_test.astype(float),coef )
-    error_test = compute_mse(y_test.astype(float), X_test_stand, coef)  
-    mae = mean_absolute_error(y_pred_test, y_test) 
+    
+    
+    
+    
+    
+    
     
     
     
